@@ -17,19 +17,20 @@
 #include "HwmonTempSensor.hpp"
 #include "Utils.hpp"
 
-#include <array>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <sdbusplus/asio/connection.hpp>
+#include <sdbusplus/asio/object_server.hpp>
+#include <sdbusplus/bus/match.hpp>
+
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <memory>
 #include <regex>
-#include <sdbusplus/asio/connection.hpp>
-#include <sdbusplus/asio/object_server.hpp>
-#include <sdbusplus/bus/match.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -39,10 +40,11 @@
 static constexpr bool DEBUG = false;
 
 namespace fs = std::filesystem;
-static constexpr std::array<const char*, 9> sensorTypes = {
+static constexpr std::array<const char*, 10> sensorTypes = {
     "xyz.openbmc_project.Configuration.EMC1413",
     "xyz.openbmc_project.Configuration.MAX31725",
     "xyz.openbmc_project.Configuration.MAX31730",
+    "xyz.openbmc_project.Configuration.MAX6581",
     "xyz.openbmc_project.Configuration.MAX6654",
     "xyz.openbmc_project.Configuration.TMP112",
     "xyz.openbmc_project.Configuration.TMP175",

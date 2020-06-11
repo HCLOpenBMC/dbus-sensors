@@ -18,13 +18,14 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
+#include <sdbusplus/asio/connection.hpp>
+#include <sdbusplus/asio/object_server.hpp>
+#include <sdbusplus/bus/match.hpp>
+
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <regex>
-#include <sdbusplus/asio/connection.hpp>
-#include <sdbusplus/asio/object_server.hpp>
-#include <sdbusplus/bus/match.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -320,4 +321,46 @@ void createInventoryAssoc(
         "/xyz/openbmc_project/inventory/system", 2,
         std::array<std::string, 1>{
             "xyz.openbmc_project.Inventory.Item.System"});
+}
+
+std::optional<double> readFile(const std::string& thresholdFile,
+                               const double& scaleFactor)
+{
+    std::string line;
+    std::ifstream labelFile(thresholdFile);
+    if (labelFile.good())
+    {
+        std::getline(labelFile, line);
+        labelFile.close();
+
+        try
+        {
+            return std::stod(line) / scaleFactor;
+        }
+        catch (const std::invalid_argument&)
+        {
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::tuple<std::string, std::string, std::string>>
+    splitFileName(const std::filesystem::path& filePath)
+{
+    if (filePath.has_filename())
+    {
+        const auto fileName = filePath.filename().string();
+        const std::regex rx(R"((\w+)(\d+)_(.*))");
+        std::smatch mr;
+
+        if (std::regex_search(fileName, mr, rx))
+        {
+            if (mr.size() == 4)
+            {
+                return std::make_optional(std::make_tuple(mr[1], mr[2], mr[3]));
+            }
+        }
+    }
+    return std::nullopt;
 }

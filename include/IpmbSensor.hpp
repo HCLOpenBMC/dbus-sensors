@@ -3,6 +3,7 @@
 
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/container/flat_map.hpp>
+
 #include <chrono>
 #include <limits>
 #include <memory>
@@ -24,7 +25,8 @@ enum class IpmbSubType
     temp,
     curr,
     power,
-    volt
+    volt,
+    util
 };
 
 struct IpmbSensor : public Sensor
