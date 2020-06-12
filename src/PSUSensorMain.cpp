@@ -498,13 +498,13 @@ void createSensors(boost::asio::io_service& io,
                 // hwmon corresponding *_label file contents:
                 // vin1, vout1, ...
                 labelHead = label.substr(0, label.find(" "));
+            }
 
-                /* append "max" for labelMatch */
-                if (maxLabel)
-                {
-                    labelHead = "max" + labelHead;
-                    maxLabel = false;
-                }
+            /* append "max" for labelMatch */
+            if (maxLabel)
+            {
+                labelHead = "max" + labelHead;
+                maxLabel = false;
             }
 
             if constexpr (DEBUG)
