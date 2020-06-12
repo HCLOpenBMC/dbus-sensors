@@ -419,7 +419,10 @@ void createSensors(boost::asio::io_service& io,
         /* read max value in sysfs for in, curr, power, temp, ... */
         if (!findFiles(directory, R"(\w\d+_max$)", sensorPaths, 0))
         {
-            std::cerr << "No PSU non-label sensor in PSU\n";
+            if constexpr (DEBUG)
+            {
+                std::cerr << "No max name in PSU \n";
+            }
             continue;
         }
 
