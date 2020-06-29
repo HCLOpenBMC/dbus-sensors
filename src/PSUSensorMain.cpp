@@ -460,7 +460,10 @@ void createSensors(boost::asio::io_service& io,
             std::string labelPath;
 
             /* find and differentiate _max and _input to replace "label" */
-            std::size_t pos = sensorPathStr.find("_");
+            int pos = sensorPathStr.find("_");
+            if(pos != std::string::npos)
+            {
+
             std::string sensorPathStrMax = sensorPathStr.substr(pos);
             if (sensorPathStrMax.compare("_max") == 0)
             {
@@ -475,6 +478,11 @@ void createSensors(boost::asio::io_service& io,
                 maxLabel = false;
             }
 
+            }
+            else
+            {
+              continue;
+            }
             std::ifstream labelFile(labelPath);
             if (!labelFile.good())
             {
