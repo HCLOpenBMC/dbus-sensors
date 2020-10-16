@@ -18,7 +18,8 @@ enum class IpmbType
     IR38363VR,
     ADM1278HSC,
     mpsVR,
-    twinLake
+    twinLake,
+    version
 };
 
 enum class IpmbSubType
@@ -36,6 +37,7 @@ enum class ReadingFormat
     byte3,
     elevenBit,
     elevenBitShift,
+    version
 };
 
 namespace ipmi
@@ -72,6 +74,12 @@ namespace me_bridge
 constexpr uint8_t netFn = 0x2e;
 constexpr uint8_t sendRawPmbus = 0xd9;
 } // namespace me_bridge
+
+namespace oem
+{
+constexpr uint8_t netFn = 0x38;
+constexpr uint8_t command = 0x0b;
+} // namespace oem
 } // namespace ipmi
 
 struct IpmbSensor : public Sensor
