@@ -19,7 +19,8 @@ enum class IpmbType
     ADM1278HSC,
     mpsVR,
     twinLake,
-    version
+    version,
+    gpio
 };
 
 enum class IpmbSubType
@@ -37,7 +38,8 @@ enum class ReadingFormat
     byte3,
     elevenBit,
     elevenBitShift,
-    version
+    version,
+    gpio
 };
 
 namespace ipmi
