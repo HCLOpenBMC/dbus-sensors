@@ -52,6 +52,7 @@ static constexpr uint8_t lun = 0;
 uint8_t Bus = 0;
 
 static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
+static constexpr const char* versionPathPrefix = "/xyz/openbmc_project/software/";
 
 using IpmbMethodType =
     std::tuple<int, uint8_t, uint8_t, uint8_t, uint8_t, std::vector<uint8_t>>;
@@ -73,22 +74,43 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
            ipmbMinReading, conn, PowerState::on),
     deviceAddress(deviceAddress), objectServer(objectServer), waitTimer(io)
 {
-    std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
-
-    sensorInterface = objectServer.add_interface(
-        dbusPath, "xyz.openbmc_project.Sensor.Value");
-
-    if (thresholds::hasWarningInterface(thresholds))
+    if (sensorTypeName == "version")
     {
-        thresholdInterfaceWarning = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+        std::string dbusPath = versionPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Software.Version");
     }
-    if (thresholds::hasCriticalInterface(thresholds))
+    else if (sensorTypeName == "volt")
     {
-        thresholdInterfaceCritical = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+        std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Gpio.Status");
+
+        std::cerr << "adding interface for gpio \n";
+        std::cout.flush();
+
     }
-    association = objectServer.add_interface(dbusPath, association::interface);
+    else
+    {
+        std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Sensor.Value");
+
+        if (thresholds::hasWarningInterface(thresholds))
+        {
+             thresholdInterfaceWarning = objectServer.add_interface(
+                dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+        }
+        if (thresholds::hasCriticalInterface(thresholds))
+        {
+             thresholdInterfaceCritical = objectServer.add_interface(
+                 dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+        }
+        association = objectServer.add_interface(dbusPath, association::interface);
+    }
 }
 
 IpmbSensor::~IpmbSensor()
@@ -103,7 +125,36 @@ IpmbSensor::~IpmbSensor()
 void IpmbSensor::init(void)
 {
     loadDefaults();
-    setInitialProperties(dbusConnection);
+    if (sensorTypeName == "version")
+    {
+        sensorInterface->register_property(
+        "Version", std::string(""), sdbusplus::asio::PropertyPermission::readWrite);
+        if (!sensorInterface->initialize())
+        {
+            std::cerr << "error initializing value interface\n";
+        }
+    }
+    else if (sensorTypeName == "volt")
+    {
+        sensorInterface->register_property(
+        "CPU_Power_Good", bool(false), sdbusplus::asio::PropertyPermission::readWrite);
+
+        sensorInterface->register_property(
+        "PCH_Power_Good", bool(false), sdbusplus::asio::PropertyPermission::readWrite);
+        sensorInterface->register_property(
+        "BIOS_Post_Complete", bool(false), sdbusplus::asio::PropertyPermission::readWrite);
+        if (!sensorInterface->initialize())
+        {
+            std::cerr << "error initializing value interface\n";
+        }
+    }
+    else
+    {
+        std::cerr << sensorTypeName << "\n";
+        std::cout.flush();
+        setInitialProperties(dbusConnection);
+    }
+
     if (initCommand)
     {
         runInitCmd();
@@ -218,6 +269,22 @@ void IpmbSensor::loadDefaults()
         commandData = {deviceAddress};
         readingFormat = ReadingFormat::byte0;
     }
+    else if (type == IpmbType::version)
+    {
+        commandAddress = Bus<<2;
+        netfn = ipmi::oem::netFn;
+        command = ipmi::oem::command;
+        commandData = {0x15, 0xa0, 0, deviceAddress};
+        readingFormat = ReadingFormat::version;
+    }
+    else if (type == IpmbType::gpio)
+    {
+        commandAddress = Bus<<2 ;
+        netfn = 0x38;
+        command = {deviceAddress};
+        commandData = {0x15, 0xa0, 0};
+        readingFormat = ReadingFormat::gpio;
+    }
     else
     {
         throw std::runtime_error("Invalid sensor type");
@@ -299,6 +366,56 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             resp = ((data[4] << 8) | data[3]) >> 3;
             return true;
         }
+        case (ReadingFormat::version):
+        {
+            std::string version;
+            for (int i=3; i<data.size(); i++)
+            {
+                 version = version + std::to_string(data[i]);
+                 if  ( i != data.size()-1 )
+                 {
+                     version = version + ".";
+                 }
+            }
+            sensorInterface->set_property("Version",version);
+            return true;
+        }
+        case (ReadingFormat::gpio):
+        {
+            std::cerr << " GPIO status \n";
+            std::cout.flush();
+            uint8_t cpu, pch, bios;
+            cpu = data[3] & 0x01;
+            pch = ((data[3] & 0x02) >> 1);
+            bios = ((data[5] & 0x20) >> 5);
+            if (cpu == 0)
+            {
+               sensorInterface->set_property("CPU_Power_Good",bool(false));
+            }
+            else
+            {
+               sensorInterface->set_property("CPU_Power_Good",bool(true));
+            }
+            if (pch == 0)
+            {
+               sensorInterface->set_property("PCH_Power_Good",bool(false));
+            }
+            else
+            {
+               sensorInterface->set_property("PCH_Power_Good",bool(true));
+            }
+            if (bios == 0)
+            {
+               sensorInterface->set_property("BIOS_Post_Complete",bool(false));
+            }
+            else
+            {
+               sensorInterface->set_property("BIOS_Post_Complete",bool(true));
+            }
+
+            return true;
+        }
+
         default:
             throw std::runtime_error("Invalid reading type");
     }
@@ -367,10 +484,12 @@ void IpmbSensor::read(void)
                     }
                     rawValue = static_cast<double>(rawData);
                 }
-
-                /* Adjust value as per scale and offset */
-                value = (value * scaleVal) + offsetVal;
-                updateValue(value);
+                if (readingFormat != ReadingFormat::version && readingFormat != ReadingFormat::gpio)
+                {
+                    /* Adjust value as per scale and offset */
+                    value = (value * scaleVal) + offsetVal;
+                    updateValue(value);
+                }
                 read();
             },
             "xyz.openbmc_project.Ipmi.Channel.Ipmb",
@@ -422,8 +541,20 @@ void createSensors(
                     std::string sensorClass =
                         loadVariant<std::string>(entry.second, "Class");
 
-                    /* Default sensor type is "temperature" */
-                    std::string sensorTypeName = "temperature";
+                    if (sensorClass == "twin_lake_fw_version")
+                    {
+                        sensorTypeName = "version";
+                    }
+                    else if (sensorClass == "twin_lake_gpio")
+                    {
+                         sensorTypeName = "volt";
+                    }
+                    else
+                    {
+                        /* Default sensor type is "temperature" */
+                        sensorTypeName = "temperature";
+                    }
+
                     auto findType = entry.second.find("SensorType");
                     if (findType != entry.second.end())
                     {
@@ -489,6 +620,14 @@ void createSensors(
                     else if (sensorClass == "twin_lake")
                     {
                         sensor->type = IpmbType::twinLake;
+                    }
+                    else if (sensorClass == "twin_lake_fw_version")
+                    {
+                        sensor->type = IpmbType::version;
+                    }
+                    else if (sensorClass == "twin_lake_gpio")
+                    {
+                        sensor->type = IpmbType::gpio;
                     }
                     else
                     {
