@@ -50,7 +50,7 @@ static constexpr double ipmbMinReading = 0;
 static constexpr uint8_t meAddress = 1;
 static constexpr uint8_t lun = 0;
 uint8_t Bus = 0;
-
+std::string sensorTypeName;
 static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
 static constexpr const char* versionPathPrefix = "/xyz/openbmc_project/software/";
 
@@ -138,7 +138,6 @@ void IpmbSensor::init(void)
     {
         sensorInterface->register_property(
         "CPU_Power_Good", bool(false), sdbusplus::asio::PropertyPermission::readWrite);
-
         sensorInterface->register_property(
         "PCH_Power_Good", bool(false), sdbusplus::asio::PropertyPermission::readWrite);
         sensorInterface->register_property(
@@ -150,8 +149,6 @@ void IpmbSensor::init(void)
     }
     else
     {
-        std::cerr << sensorTypeName << "\n";
-        std::cout.flush();
         setInitialProperties(dbusConnection);
     }
 
@@ -382,8 +379,6 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
         }
         case (ReadingFormat::gpio):
         {
-            std::cerr << " GPIO status \n";
-            std::cout.flush();
             uint8_t cpu, pch, bios;
             cpu = data[3] & 0x01;
             pch = ((data[3] & 0x02) >> 1);
