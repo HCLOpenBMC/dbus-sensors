@@ -29,7 +29,8 @@ enum class IpmbSubType
     curr,
     power,
     volt,
-    util
+    util,
+    version
 };
 
 enum class ReadingFormat

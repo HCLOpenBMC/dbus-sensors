@@ -87,10 +87,6 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
 
         sensorInterface = objectServer.add_interface(
             dbusPath, "xyz.openbmc_project.Gpio.Status");
-
-        std::cerr << "adding interface for gpio \n";
-        std::cout.flush();
-
     }
     else
     {
@@ -268,11 +264,14 @@ void IpmbSensor::loadDefaults()
     }
     else if (type == IpmbType::version)
     {
-        commandAddress = Bus<<2;
-        netfn = ipmi::oem::netFn;
-        command = ipmi::oem::command;
-        commandData = {0x15, 0xa0, 0, deviceAddress};
-        readingFormat = ReadingFormat::version;
+        if (subType == IpmbSubType::version)
+        {
+            commandAddress = Bus<<2;
+            netfn = ipmi::oem::netFn;
+            command = ipmi::oem::command;
+            commandData = {0x15, 0xa0, 0, deviceAddress};
+            readingFormat = ReadingFormat::version;
+        }
     }
     else if (type == IpmbType::gpio)
     {
@@ -366,6 +365,15 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
         case (ReadingFormat::version):
         {
             std::string version;
+            if (data.size() < 5)
+            {
+                if (!errCount)
+                {
+                    std::cerr << "Invalid data length returned for " << name
+                              << "\n";
+                }
+                return false;
+            }
             for (int i=3; i<data.size(); i++)
             {
                  version = version + std::to_string(data[i]);
@@ -536,11 +544,7 @@ void createSensors(
                     std::string sensorClass =
                         loadVariant<std::string>(entry.second, "Class");
 
-                    if (sensorClass == "twin_lake_fw_version")
-                    {
-                        sensorTypeName = "version";
-                    }
-                    else if (sensorClass == "twin_lake_gpio")
+                    if (sensorClass == "twin_lake_gpio")
                     {
                          sensorTypeName = "volt";
                     }
@@ -645,6 +649,10 @@ void createSensors(
                     else if (sensorTypeName == "utilization")
                     {
                         sensor->subType = IpmbSubType::util;
+                    }
+                    else if (sensorTypeName == "version")
+                    {
+                        sensor->subType = IpmbSubType::version;
                     }
                     else
                     {
