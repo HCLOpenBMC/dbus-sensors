@@ -19,6 +19,8 @@ constexpr const char* operationalInterfaceName =
     "xyz.openbmc_project.State.Decorator.OperationalStatus";
 constexpr const size_t errorThreshold = 5;
 
+extern std::string fanFaultHandle;
+
 struct Sensor
 {
     Sensor(const std::string& name,
