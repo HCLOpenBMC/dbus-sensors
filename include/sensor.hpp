@@ -20,6 +20,7 @@ constexpr const char* operationalInterfaceName =
 constexpr const size_t errorThreshold = 5;
 
 extern std::string fanFaultHandle;
+extern std::string nicFaultHandle;
 
 struct Sensor
 {

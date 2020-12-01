@@ -21,6 +21,8 @@
 
 using sdbusplus::exception::SdBusError;
 std::string fanFaultHandle;
+std::string nicFaultHandle;
+bool slotThermalDown = false;
 
 static constexpr bool DEBUG = false;
 namespace thresholds
@@ -67,19 +69,18 @@ static constexpr auto systemdBusname = "org.freedesktop.systemd1";
 static constexpr auto systemdPath = "/org/freedesktop/systemd1";
 static constexpr auto systemdInterface = "org.freedesktop.systemd1.Manager";
 
-void powerOffService()
+void slotPowerCycle(std::string ServiceFile)
 {
     boost::asio::io_service io;
     auto bus = std::make_shared<sdbusplus::asio::connection>(io);
 
     auto method = bus->new_method_call(systemdBusname, systemdPath,
                                       systemdInterface, "StartUnit");
-    auto ServiceFile = "powerOff.service";
     method.append(ServiceFile, "replace");
     try
     {
         bus->call_noreply(method);
-        std::cerr<< "power off service \n";
+        std::cerr<< "Slot power cycle success \n";
     }
     catch (const SdBusError& e)
     {
@@ -294,6 +295,17 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
 
     for (auto& threshold : sensor->thresholds)
     {
+        if((nicFaultHandle == "Yes") && (slotThermalDown))
+        {
+            if (value <= threshold.value)
+            {
+               slotPowerCycle("powerOnSlot.service");
+               std::cerr<<"power on Slot called... \n";
+
+               slotThermalDown = false;
+            }
+        }
+
         // Use "Schmitt trigger" logic to avoid threshold trigger spam,
         // if value is noisy while hovering very close to a threshold.
         // When a threshold is crossed, indicate true immediately,
@@ -309,6 +321,14 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
                     std::cerr << "Sensor " << sensor->name << " high threshold "
                               << threshold.value << " assert: value " << value
                               << " raw data " << sensor->rawValue << "\n";
+
+                     if(nicFaultHandle == "Yes")
+                     {
+                        slotPowerCycle("powerOffSlot.service");
+                        std::cerr<<"power off Slot called \n";
+
+                        slotThermalDown = true;
+                     }
                 }
             }
             else if (value < (threshold.value - sensor->hysteresisTrigger))
@@ -335,8 +355,8 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
 
                      if(fanFaultHandle == "Yes")
                      {
-                        powerOffService();
-                        std::cerr<<"power off called \n";
+                        slotPowerCycle("powerOffSlot.service");
+                        std::cerr<<"power off Slot called \n";
                      }
 
                 }
