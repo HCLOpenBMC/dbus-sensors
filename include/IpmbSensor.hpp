@@ -17,7 +17,9 @@ enum class IpmbType
     PXE1410CVR,
     IR38363VR,
     ADM1278HSC,
-    mpsVR
+    mpsVR,
+    SDRType,
+    SDRStEvtType
 };
 
 enum class IpmbSubType
@@ -35,6 +37,21 @@ enum class ReadingFormat
     byte3,
     elevenBit,
     elevenBitShift,
+    sdrTyp,
+    sdrStEvt
+};
+
+std::vector<std::string> Sensor_Unit
+{
+  "unspecified",
+  "degrees C",
+  "degrees F",
+  "degrees K",
+  "Volts",
+  "Amps",
+  "Watts",
+  "Joules",
+  "Coulombs"
 };
 
 namespace ipmi
@@ -86,6 +103,7 @@ struct IpmbSensor : public Sensor
 
     void checkThresholds(void) override;
     void read(void);
+    void sdrRead(void);
     void init(void);
     void loadDefaults(void);
     void runInitCmd(void);

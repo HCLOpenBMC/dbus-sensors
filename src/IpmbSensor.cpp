@@ -56,6 +56,54 @@ static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
 using IpmbMethodType =
     std::tuple<int, uint8_t, uint8_t, uint8_t, uint8_t, std::vector<uint8_t>>;
 
+boost::asio::io_service io;
+auto systemBus = std::make_shared<sdbusplus::asio::connection>(io);
+
+std::string sensorName;
+std::string sensorTypeName;
+std::string strUnit;
+std::string hostName;
+std::string tempHostName;
+std::vector<std::string> vecHostName;
+uint8_t upperCri;
+uint8_t lowerCri;
+uint8_t dev_addr;
+std::vector<uint8_t> ipmbAddress;
+uint8_t cmdAdr;
+static constexpr const char* statusPathPrefix = "/xyz/openbmc_project/software/";
+
+static constexpr const char* MAPPER_BUSNAME = "xyz.openbmc_project.ObjectMapper";
+static constexpr const char* MAPPER_INTERFACE = "xyz.openbmc_project.ObjectMapper";
+static constexpr const char* MAPPER_PATH = "/xyz/openbmc_project/object_mapper";
+
+void runSDRInfoCmd();
+void runRsrvSDRCmd();
+void runGetSDRCmd();
+void sdrDataProcess();
+
+uint8_t s_commandAddress;
+uint8_t s_netfn;
+uint8_t s_command;
+std::vector<uint8_t> s_commandData;
+
+static std::vector<uint32_t> ipmbBus;
+std::vector<uint8_t> getSdrData;
+static std::vector<uint8_t> sensorNumber;
+static std::vector<uint8_t> sensorSDRType;
+static std::vector<uint8_t> sensorSDREvent;
+static std::vector<uint8_t> thresUpperCri;
+static std::vector<uint8_t> thresLowerCri;
+static std::vector<std::string> sensorReadName;
+static std::vector<std::string> sensorUnit;
+uint16_t recordCount;
+uint8_t resrvIDLSB = 0;
+uint8_t resrvIDMSB = 0;
+uint8_t nextRecordIDLSB = 0;
+uint8_t nextRecordIDMSB = 0;
+uint8_t recordCountLSB;
+uint8_t recordCountMSB;
+
+
 boost::container::flat_map<std::string, std::unique_ptr<IpmbSensor>> sensors;
 
 std::unique_ptr<boost::asio::deadline_timer> initCmdTimer;
@@ -75,22 +123,39 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
     deviceAddress(deviceAddress), hostSMbusIndex(hostSMbusIndex),
     objectServer(objectServer), waitTimer(io)
 {
-    std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
-
-    sensorInterface = objectServer.add_interface(
-        dbusPath, "xyz.openbmc_project.Sensor.Value");
-
-    if (thresholds::hasWarningInterface(thresholds))
+    if (sensorTypeName == "SDR_Type_02") 
     {
-        thresholdInterfaceWarning = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+	std::string dbusPath = statusPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Software.State");
     }
-    if (thresholds::hasCriticalInterface(thresholds))
+    else if (sensorTypeName == "SDR_Type_03")
     {
-        thresholdInterfaceCritical = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+        std::string dbusPath = statusPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Software.Events");
     }
-    association = objectServer.add_interface(dbusPath, association::interface);
+    else
+    {
+	    std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
+
+	    sensorInterface = objectServer.add_interface(
+			    dbusPath, "xyz.openbmc_project.Sensor.Value");
+
+	    if (thresholds::hasWarningInterface(thresholds))
+	    {
+		    thresholdInterfaceWarning = objectServer.add_interface(
+				    dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+	    }
+	    if (thresholds::hasCriticalInterface(thresholds))
+	    {
+		    thresholdInterfaceCritical = objectServer.add_interface(
+				    dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+	    }
+	    association = objectServer.add_interface(dbusPath, association::interface);
+    }
 }
 
 IpmbSensor::~IpmbSensor()
@@ -104,13 +169,56 @@ IpmbSensor::~IpmbSensor()
 
 void IpmbSensor::init(void)
 {
-    loadDefaults();
-    setInitialProperties(dbusConnection);
-    if (initCommand)
-    {
-        runInitCmd();
-    }
-    read();
+	loadDefaults();
+	if (sensorTypeName == "SDR_Type_01")
+	{
+		sensorInterface->register_property(
+				"Sensor_Unit", std::string(""), sdbusplus::asio::PropertyPermission::readWrite);
+		sensorInterface->register_property(
+				"Thres_UpperCritical", uint8_t(0), sdbusplus::asio::PropertyPermission::readWrite);
+		sensorInterface->register_property(
+				"Thres_LowerCritical", uint8_t(0), sdbusplus::asio::PropertyPermission::readWrite);
+		setInitialProperties(dbusConnection);
+		sensorInterface->set_property("Sensor_Unit", strUnit);
+		sensorInterface->set_property("Thres_UpperCritical", upperCri);
+		sensorInterface->set_property("Thres_LowerCritical", lowerCri);
+	}
+	else if (sensorTypeName == "SDR_Type_02")
+	{
+		sensorInterface->register_property(
+				"State", uint8_t(0), sdbusplus::asio::PropertyPermission::readWrite);
+		if (!sensorInterface->initialize())
+		{
+			std::cerr << "error initializing value interface\n";
+		}
+	}
+	else if (sensorTypeName == "SDR_Type_03")
+	{
+		sensorInterface->register_property(
+				"Events", uint8_t(0), sdbusplus::asio::PropertyPermission::readWrite);
+		if (!sensorInterface->initialize())
+		{
+			std::cerr << "error initializing value interface\n";
+		}
+	}
+	else
+	{
+		setInitialProperties(dbusConnection);
+	}
+
+	if (initCommand)
+	{
+		runInitCmd();
+	}
+
+	if( (sensorTypeName == "SDR_Type_01") || (sensorTypeName == "SDR_Type_02") || (sensorTypeName == "SDR_Type_03"))
+	{
+		sdrRead();
+	}
+	else
+	{
+		read();
+	}
 }
 
 void IpmbSensor::runInitCmd()
@@ -133,6 +241,194 @@ void IpmbSensor::runInitCmd()
             "/xyz/openbmc_project/Ipmi/Channel/Ipmb", "org.openbmc.Ipmb",
             "sendRequest", commandAddress, netfn, lun, *initCommand, initData);
     }
+}
+
+
+void findObjects()
+{
+	const char *objPath;
+	const char *objInterface;
+
+	const char* BUSNAME = "xyz.openbmc_project.Ipmb.FruDevice";
+	std::string fruPath = "/xyz/openbmc_project/Ipmb/FruDevice";
+	std::string fruInt = "xyz.openbmc_project.Ipmb.FruDevice";
+	std::vector<std::string> paths;
+	uint32_t iBus;
+	auto method = systemBus->new_method_call(MAPPER_BUSNAME, MAPPER_PATH,
+			MAPPER_INTERFACE, "GetSubTreePaths");
+	method.append(fruPath);
+	method.append(0); // Depth 0 to search all
+	method.append(std::vector<std::string>({fruInt}));
+	auto reply = systemBus->call(method);
+	reply.read(paths);
+
+	for(int iPath=0; iPath < paths.size(); iPath++)
+	{
+		objPath = paths.at(iPath).c_str();
+		objInterface = fruInt.c_str();
+		auto method = systemBus->new_method_call(BUSNAME, objPath,
+				"org.freedesktop.DBus.Properties", "Get");
+		method.append(objInterface, "BUS");
+		auto reply = systemBus->call(method);
+
+		std::variant<uint32_t> resp;
+		reply.read(resp);
+
+		ipmbBus.push_back(std::get<uint32_t>(resp));
+	}
+}
+
+void runSDRInfoCmd()
+{
+	s_commandAddress = cmdAdr;
+	s_netfn = 0x0a;
+	s_command = 0x20;
+	s_commandData = {};
+
+	auto method =
+		systemBus->new_method_call("xyz.openbmc_project.Ipmi.Channel.Ipmb",
+				"/xyz/openbmc_project/Ipmi/Channel/Ipmb",
+				"org.openbmc.Ipmb", "sendRequest");
+
+	method.append(s_commandAddress, s_netfn, lun, s_command, s_commandData);
+
+	auto reply = systemBus->call(method);
+	if (reply.is_method_error())
+	{    
+		std::cerr << "Error reading from Ipmb";
+		return;
+	}    
+
+	IpmbMethodType resp;
+	reply.read(resp);
+
+	std::vector<uint8_t> data;
+	data = std::get<5>(resp);
+
+	recordCountLSB = data.at(1);
+	recordCountMSB = data.at(2);
+	recordCount = (((recordCountMSB << 8) & 0xFF00) | recordCountLSB);	
+}
+
+void runRsrvSDRCmd()
+{
+	s_commandAddress = cmdAdr;
+	s_netfn = 0x0a;
+	s_command = 0x22;
+	s_commandData = {};
+
+	auto method =
+		systemBus->new_method_call("xyz.openbmc_project.Ipmi.Channel.Ipmb",
+				"/xyz/openbmc_project/Ipmi/Channel/Ipmb",
+				"org.openbmc.Ipmb", "sendRequest");
+
+	method.append(s_commandAddress, s_netfn, lun, s_command, s_commandData);
+
+	auto reply = systemBus->call(method);
+	if (reply.is_method_error())
+	{    
+		std::cerr << "Error reading from Ipmb";
+	}    
+
+	IpmbMethodType resp;
+	reply.read(resp);
+
+	std::vector<uint8_t> data;
+	data = std::get<5>(resp);
+
+	resrvIDLSB = data.at(0);
+	resrvIDMSB = data.at(1);
+}
+
+
+void runGetSDRCmd()
+{
+	getSdrData.clear();
+	int iLoop =4;
+	for(int iCnt = 0; iCnt < iLoop; iCnt++)
+	{
+		s_commandAddress = cmdAdr;
+		s_netfn = 0x0a;
+		s_command = 0x23;
+		uint8_t s_count = 16 * iCnt;
+		s_commandData = {resrvIDLSB, resrvIDMSB, nextRecordIDLSB, nextRecordIDMSB, s_count, 16};
+
+		auto method =
+			systemBus->new_method_call("xyz.openbmc_project.Ipmi.Channel.Ipmb",
+					"/xyz/openbmc_project/Ipmi/Channel/Ipmb",
+					"org.openbmc.Ipmb", "sendRequest");
+
+		method.append(s_commandAddress, s_netfn, lun, s_command, s_commandData);
+
+		auto reply = systemBus->call(method);
+		if (reply.is_method_error())
+		{    
+			std::cerr << "Error reading from Ipmb";
+		}    
+
+		IpmbMethodType resp;
+		reply.read(resp);
+
+		std::vector<uint8_t> data;
+		data = std::get<5>(resp);
+
+		for(int iData=0; iData<data.size(); iData++)
+		{
+			getSdrData.push_back(data.at(iData));
+		}
+		int iType = (int)getSdrData[5];	
+		if(iType == 2)
+		{
+			iLoop = 3;
+		}
+		else if(iType == 3)
+		{
+			iLoop = 2;
+		}
+	}
+}
+
+
+void sdrDataProcess()
+{
+	std::string tempName = "";
+	int iStrAddr=0;
+	int iStrLen=0;
+	int isdrType = (int)getSdrData[5];
+
+	nextRecordIDLSB = getSdrData[0];
+	nextRecordIDMSB = getSdrData[1];
+
+	sensorNumber.push_back(getSdrData[9]);
+	sensorSDRType.push_back(getSdrData[5]);
+
+	if(isdrType == 1)
+	{
+		iStrAddr = 56;
+		iStrLen = (((int)getSdrData[53]) & 0x1F);
+		sensorSDREvent.push_back(getSdrData[14]);
+		sensorUnit.push_back(Sensor_Unit[getSdrData[25]]);
+		thresUpperCri.push_back(getSdrData[43]);
+		thresLowerCri.push_back(getSdrData[46]);
+	}
+	else if(isdrType == 2)
+	{
+		iStrAddr = 38;
+		iStrLen = (((int)getSdrData[35]) & 0x1F);
+		sensorSDREvent.push_back(getSdrData[14]);
+	}
+	else if(isdrType == 3)
+	{
+		iStrAddr = 21;
+		iStrLen = (((int)getSdrData[20]) & 0x1F);
+		sensorSDREvent.push_back(getSdrData[12]);
+	}
+	for (int iLoop = 0; iLoop < iStrLen; iLoop++) { 
+		tempName = tempName + (char)getSdrData[iStrAddr];
+		iStrAddr++;
+	} 
+	sensorReadName.push_back(tempName);
+	tempName.clear();
 }
 
 void IpmbSensor::loadDefaults()
@@ -217,6 +513,22 @@ void IpmbSensor::loadDefaults()
                     0x02,          0x00, 0x00, 0x00};
         readingFormat = ReadingFormat::byte3;
     }
+    else if (type == IpmbType::SDRType)
+    {
+        commandAddress = cmdAdr;
+        netfn = ipmi::sensor::netFn;
+        command = ipmi::sensor::getSensorReading;
+        commandData = {dev_addr};
+        readingFormat = ReadingFormat::sdrTyp;
+    }
+    else if (type == IpmbType::SDRStEvtType)
+    {
+        commandAddress = cmdAdr;
+        netfn = ipmi::sensor::netFn;
+        command = ipmi::sensor::getSensorReading;
+        commandData = {dev_addr};
+        readingFormat = ReadingFormat::sdrStEvt;
+    }
     else
     {
         throw std::runtime_error("Invalid sensor type");
@@ -298,6 +610,35 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             resp = ((data[4] << 8) | data[3]) >> 3;
             return true;
         }
+        case (ReadingFormat::sdrTyp):
+	{
+		if (command == ipmi::sensor::getSensorReading &&
+				!ipmi::sensor::isValid(data))
+		{
+			return false;
+		}
+		resp = data[0];
+		return true;
+	}
+        case (ReadingFormat::sdrStEvt):
+        {
+            if (command == ipmi::sensor::getSensorReading &&
+                !ipmi::sensor::isValid(data))
+            {
+                return false;
+            }
+	    if (sensorTypeName == "SDR_Type_02")
+	    {
+            	sensorInterface->set_property("State", data[2]);
+	    }
+	    else if (sensorTypeName == "SDR_Type_03")
+	    {
+            	sensorInterface->set_property("Events", data[2]);
+	    }
+
+            return true;
+        }
+
         default:
             throw std::runtime_error("Invalid reading type");
     }
@@ -377,6 +718,42 @@ void IpmbSensor::read(void)
             "sendRequest", commandAddress, netfn, lun, command, commandData);
     });
 }
+
+void IpmbSensor::sdrRead(void)
+{
+	auto method =
+		systemBus->new_method_call("xyz.openbmc_project.Ipmi.Channel.Ipmb",
+				"/xyz/openbmc_project/Ipmi/Channel/Ipmb",
+				"org.openbmc.Ipmb", "sendRequest");
+
+	method.append(commandAddress, netfn, lun, command, commandData);
+
+	auto reply = systemBus->call(method);
+	if (reply.is_method_error())
+	{    
+		std::cerr << "Error reading from Ipmb";
+	}    
+
+	IpmbMethodType resp;
+	reply.read(resp);
+
+	std::vector<uint8_t> data;
+	data = std::get<5>(resp);
+
+	double value = 0;
+
+	if (!processReading(data, value))
+	{
+		std::cerr << "Reading Unknown Value from " << sensorName <<"\n";
+	}
+	if (readingFormat != ReadingFormat::sdrStEvt)
+	{
+		/* Adjust value as per scale and offset */
+		value = (value * scaleVal) + offsetVal;
+		updateValue(value);
+	}
+}
+
 void createSensors(
     boost::asio::io_service& io, sdbusplus::asio::object_server& objectServer,
     boost::container::flat_map<std::string, std::unique_ptr<IpmbSensor>>&
@@ -524,6 +901,88 @@ void createSensors(
         "GetManagedObjects");
 }
 
+
+void createObj(
+    boost::asio::io_service& io, sdbusplus::asio::object_server& objectServer,
+    boost::container::flat_map<std::string, std::unique_ptr<IpmbSensor>>&
+        sensors,
+    std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
+{
+	static ManagedObjectType managedObj;
+
+	managedObj.clear();
+	sdbusplus::message::message getManagedObjects =
+		dbusConnection->new_method_call(
+				entityManagerName, "/", "org.freedesktop.DBus.ObjectManager",
+				"GetManagedObjects");
+	bool err = false;
+	try
+	{
+		sdbusplus::message::message reply =
+			dbusConnection->call(getManagedObjects);
+		reply.read(managedObj);
+	}
+	catch (const sdbusplus::exception::exception& e)
+	{
+		std::cerr << "While calling GetManagedObjects on service:"
+			<< entityManagerName << " exception name:" << e.name()
+			<< "and description:" << e.description()
+			<< " was thrown\n";
+		err = true;
+	}
+
+	if (err)
+	{
+		std::cerr << "Error communicating to entity manager\n";
+	}
+	for (int i=0; i<recordCount; i++)
+	{
+		dev_addr = sensorNumber[i];
+		sensorName = hostName + sensorReadName[i];
+
+		if (sensorSDRType[i] == 1)
+		{
+			sensorTypeName = "SDR_Type_01";
+		}
+		else if (sensorSDRType[i] == 2)
+		{
+			sensorTypeName = "SDR_Type_02";
+		}
+		else if (sensorSDRType[i] == 3)
+		{
+			sensorTypeName = "SDR_Type_03";
+		}
+
+		std::vector<thresholds::Threshold> sensorThresholds;
+                uint8_t hostSMbusIndex = hostSMbusIndexDefault;
+
+		auto& sensor = sensors[sensorName];
+		sensor = std::make_unique<IpmbSensor>(
+				dbusConnection, io, sensorName, sensorName, objectServer,
+				std::move(sensorThresholds), dev_addr,
+				hostSMbusIndex, sensorTypeName);
+
+		/* Initialize scale and offset value */
+		sensor->scaleVal = 1;
+		sensor->offsetVal = 0;
+		setReadState("Always", sensor->readState);
+		if (sensorTypeName == "SDR_Type_01")
+		{
+			sensor->type = IpmbType::SDRType;
+			strUnit = sensorUnit[i];
+			upperCri = thresUpperCri[i];
+			lowerCri = thresLowerCri[i];
+
+			sensor->init();
+		}
+		else
+		{ 
+			sensor->type = IpmbType::SDRStEvtType;
+			sensor->init();
+		}
+	}
+}
+
 void reinitSensors(sdbusplus::message::message& message)
 {
     constexpr const size_t reinitWaitSeconds = 2;
@@ -578,6 +1037,24 @@ int main()
 
     io.post([&]() { createSensors(io, objectServer, sensors, systemBus); });
 
+    findObjects();
+    for(int iter=0; iter<ipmbBus.size(); iter++)
+    {    
+            cmdAdr = ipmbBus.at(iter)<<2;
+            hostName = "Host-" + std::to_string(cmdAdr>>2) + "-"; 
+
+            runSDRInfoCmd();
+            runRsrvSDRCmd();
+
+            for(int iCnt = 0; iCnt < recordCount; iCnt++)
+            {
+                    runGetSDRCmd();
+                    sdrDataProcess();
+            }
+
+            createObj(io, objectServer, sensors, systemBus);
+    } 
+
     boost::asio::deadline_timer configTimer(io);
 
     std::function<void(sdbusplus::message::message&)> eventHandler =
@@ -590,6 +1067,7 @@ int main()
                     return; // we're being canceled
                 }
                 createSensors(io, objectServer, sensors, systemBus);
+                createObj(io, objectServer, sensors, systemBus);
                 if (sensors.empty())
                 {
                     std::cout << "Configuration not detected\n";
