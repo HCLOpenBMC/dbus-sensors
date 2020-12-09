@@ -54,6 +54,76 @@ std::vector<std::string> Sensor_Unit
   "Coulombs"
 };
 
+namespace sdr
+{
+void ipmbGetSdrInfo();
+void ipmbSdrRsrv();
+void ipmbGetSdr();
+void sdrDataProcess();
+
+static constexpr uint8_t sdrNetfun = 0x0a;
+static constexpr uint8_t sdrGetInfo = 0x20;
+static constexpr uint8_t sdrRsrv = 0x22;
+static constexpr uint8_t sdrGet = 0x23;
+
+static constexpr uint8_t sdrType01 = 1;
+static constexpr uint8_t sdrType02 = 2;
+static constexpr uint8_t sdrType03 = 3;
+
+static constexpr uint8_t sdrNxtRecLSB = 0;
+static constexpr uint8_t sdrNxtRecMSB = 1;
+static constexpr uint8_t sdrType = 5;
+static constexpr uint8_t sdrSenNum = 9;
+
+static constexpr uint8_t sdrAdrType01 = 56;
+static constexpr uint8_t sdrAdrType02 = 38;
+static constexpr uint8_t sdrAdrType03 = 21;
+
+static constexpr uint8_t sdrLenBit = 0x1F;
+static constexpr uint8_t sdrLenType01 = 53;
+static constexpr uint8_t sdrLenType02 = 35;
+static constexpr uint8_t sdrLenType03 = 20;
+
+static constexpr uint8_t sdrEveType01 = 14;
+static constexpr uint8_t sdrEveType02 = 14;
+static constexpr uint8_t sdrEveType03 = 12;
+
+static constexpr uint8_t sdrUnitType01 = 25;
+static constexpr uint8_t sdrUpCriType01 = 43;
+static constexpr uint8_t sdrLoCriType01 = 46;
+
+uint8_t sdrCommandAddress;
+uint8_t sdrNetfn;
+uint8_t sdrCommand;
+std::vector<uint8_t> sdrCommandData;
+
+std::string sensorName;
+std::string sensorTypeName;
+std::string strUnit;
+std::string hostName;
+uint8_t upperCri;
+uint8_t lowerCri;
+uint8_t dev_addr;
+
+uint8_t cmdAdr;
+
+static std::vector<uint32_t> ipmbBus;
+std::vector<uint8_t> getSdrData;
+static std::vector<uint8_t> sensorNumber;
+static std::vector<uint8_t> sensorSDRType;
+static std::vector<uint8_t> sensorSDREvent;
+static std::vector<uint8_t> thresUpperCri;
+static std::vector<uint8_t> thresLowerCri;
+static std::vector<std::string> sensorReadName;
+static std::vector<std::string> sensorUnit;
+
+uint16_t recordCount;
+uint8_t resrvIDLSB = 0; 
+uint8_t resrvIDMSB = 0; 
+uint8_t nextRecordIDLSB = 0; 
+uint8_t nextRecordIDMSB = 0;
+} // namespace sdr
+
 namespace ipmi
 {
 namespace sensor
