@@ -75,40 +75,22 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
     deviceAddress(deviceAddress), hostSMbusIndex(hostSMbusIndex),
     objectServer(objectServer), waitTimer(io)
 {
-    if (sensorTypeName == "SDR_Type_02")
+    std::string dbusPath = sensorPathPrefix + name;
+
+    sensorInterface = objectServer.add_interface(
+        dbusPath, "xyz.openbmc_project.Sensor.Value");
+
+    if (thresholds::hasWarningInterface(thresholds))
     {
-        std::string dbusPath = sensorPathPrefix + name;
-
-        sensorInterface = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Software.State");
+        thresholdInterfaceWarning = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
     }
-    else if (sensorTypeName == "SDR_Type_03")
+    if (thresholds::hasCriticalInterface(thresholds))
     {
-        std::string dbusPath = sensorPathPrefix + name;
-
-        sensorInterface = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Software.Events");
+        thresholdInterfaceCritical = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
     }
-    else
-    {
-        std::string dbusPath = sensorPathPrefix + name;
-
-        sensorInterface = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Value");
-
-        if (thresholds::hasWarningInterface(thresholds))
-        {
-            thresholdInterfaceWarning = objectServer.add_interface(
-                dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
-        }
-        if (thresholds::hasCriticalInterface(thresholds))
-        {
-            thresholdInterfaceCritical = objectServer.add_interface(
-                dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
-        }
-        association =
-            objectServer.add_interface(dbusPath, association::interface);
-    }
+    association = objectServer.add_interface(dbusPath, association::interface);
 }
 
 IpmbSensor::~IpmbSensor()
@@ -129,35 +111,15 @@ void IpmbSensor::init(void)
             "Unit", std::string(""),
             sdbusplus::asio::PropertyPermission::readWrite);
         sensorInterface->register_property(
-            "Thres_UpperCritical", uint8_t(0),
+            "Thres_UpperCritical", double(0),
             sdbusplus::asio::PropertyPermission::readWrite);
         sensorInterface->register_property(
-            "Thres_LowerCritical", uint8_t(0),
+            "Thres_LowerCritical", double(0),
             sdbusplus::asio::PropertyPermission::readWrite);
         setInitialProperties(dbusConnection);
         sensorInterface->set_property("Unit", sdr::strUnit);
         sensorInterface->set_property("Thres_UpperCritical", sdr::upperCri);
         sensorInterface->set_property("Thres_LowerCritical", sdr::lowerCri);
-    }
-    else if (sdr::sensorTypeName == "SDR_Type_02")
-    {
-        sensorInterface->register_property(
-            "State", uint8_t(0),
-            sdbusplus::asio::PropertyPermission::readWrite);
-        if (!sensorInterface->initialize())
-        {
-            std::cerr << "error initializing value interface\n";
-        }
-    }
-    else if (sdr::sensorTypeName == "SDR_Type_03")
-    {
-        sensorInterface->register_property(
-            "Events", uint8_t(0),
-            sdbusplus::asio::PropertyPermission::readWrite);
-        if (!sensorInterface->initialize())
-        {
-            std::cerr << "error initializing value interface\n";
-        }
     }
     else
     {
@@ -344,6 +306,11 @@ void sdr::ipmbGetSdr(
 
 void sdr::sdrDataProcess()
 {
+    uint16_t mData = 0;
+    uint16_t bData = 0;
+    int8_t bExpVal, rExpVal;
+    double thresUpCri;
+    double thresLoCri;
     std::string tempName = "";
     int iStrAddr = 0;
     int iStrLen = 0;
@@ -363,8 +330,36 @@ void sdr::sdrDataProcess()
         sensorSDREvent.push_back(getSdrData[sdrEveType01]);
         sensorUnit.push_back(Sensor_Unit[getSdrData[sdrUnitType01]]);
 
-        thresUpperCri.push_back(getSdrData[sdrUpCriType01]);
-        thresLowerCri.push_back(getSdrData[sdrLoCriType01]);
+        mData = ((getSdrData[mTolDataByte] >> bitShiftMsb) << 8) |
+                getSdrData[mDataByte];
+        bData = ((getSdrData[bAcuDataByte] >> bitShiftMsb) << 8) |
+                getSdrData[bDataByte];
+
+        bExpVal = getSdrData[rbExpDataBye] & 0xF;
+        if (bExpVal > 7)
+        {
+            bExpVal = (~bExpVal + 1) & 0xF;
+            bExpVal = -bExpVal;
+        }
+        rExpVal = (getSdrData[rbExpDataBye] >> 4) & 0xF;
+        if (rExpVal > 7)
+        {
+            rExpVal = (~rExpVal + 1) & 0xF;
+            rExpVal = -rExpVal;
+        }
+        thresUpCri = ((mData * getSdrData[sdrUpCriType01]) +
+                      (bData * pow(10, bExpVal))) *
+                     (pow(10, rExpVal));
+        thresLoCri = ((mData * getSdrData[sdrLoCriType01]) +
+                      (bData * pow(10, bExpVal))) *
+                     (pow(10, rExpVal));
+
+        thresUpperCri.push_back(thresUpCri);
+        thresLowerCri.push_back(thresLoCri);
+        mValue.push_back(mData);
+        bValue.push_back(bData);
+        bExp.push_back(bExpVal);
+        rExp.push_back(rExpVal);
     }
     else if (isdrType == sdrType02)
     {
@@ -385,6 +380,33 @@ void sdr::sdrDataProcess()
     }
     sensorReadName.push_back(tempName);
     tempName.clear();
+}
+
+double sdr::dataConversion(double conValue, uint8_t recCount)
+{
+    double dataCon;
+    dataCon = ((mValue[recCount] * conValue) +
+               (bValue[recCount] * pow(10, bExp[recCount]))) *
+              (pow(10, rExp[recCount]));
+
+    if ((dev_addr == SENSOR_SOC_THERM_MARGIN) && (dataCon > 0))
+    {
+        dataCon -= thermalConst;
+    }
+
+    if (dataCon > maxPosReadingMargin)
+    {
+        // Negative reading handle
+        for (int i = 0;
+             i < sizeof(neg_reading_sensor_support_list) / sizeof(uint8_t); i++)
+        {
+            if (dev_addr == neg_reading_sensor_support_list[i])
+            {
+                dataCon -= thermalConst;
+            }
+        }
+    }
+    return dataCon;
 }
 
 void IpmbSensor::loadDefaults()
@@ -583,15 +605,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             {
                 return false;
             }
-            if (sdr::sensorTypeName == "SDR_Type_02")
-            {
-                sensorInterface->set_property("State", data[2]);
-            }
-            else if (sdr::sensorTypeName == "SDR_Type_03")
-            {
-                sensorInterface->set_property("Events", data[2]);
-            }
-
+            resp = data[2];
             return true;
         }
 
@@ -704,8 +718,13 @@ void IpmbSensor::sdrRead(void)
     }
     if (readingFormat != ReadingFormat::sdrStEvt)
     {
+        value = sdr::dataConversion(value, sdr::curRecord);
         /* Adjust value as per scale and offset */
         value = (value * scaleVal) + offsetVal;
+        updateValue(value);
+    }
+    else
+    {
         updateValue(value);
     }
 }
@@ -926,6 +945,7 @@ void createObj(boost::asio::io_service& io,
             sdr::strUnit = sdr::sensorUnit[i];
             sdr::upperCri = sdr::thresUpperCri[i];
             sdr::lowerCri = sdr::thresLowerCri[i];
+            sdr::curRecord = i;
 
             sensor->init();
         }

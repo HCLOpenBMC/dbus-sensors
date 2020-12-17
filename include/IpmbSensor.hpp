@@ -47,10 +47,32 @@ std::vector<std::string> Sensor_Unit{"unspecified", "degrees C", "degrees F",
 
 namespace sdr
 {
-void ipmbGetSdrInfo(std::shared_ptr<sdbusplus::asio::connection>& dbusConnection);
+void ipmbGetSdrInfo(
+    std::shared_ptr<sdbusplus::asio::connection>& dbusConnection);
 void ipmbSdrRsrv(std::shared_ptr<sdbusplus::asio::connection>& dbusConnection);
 void ipmbGetSdr(std::shared_ptr<sdbusplus::asio::connection>& dbusConnection);
 void sdrDataProcess();
+double dataConversion(double, uint8_t);
+
+enum
+{
+    SENSOR_MB_OUTLET_TEMP = 0x01,
+    SENSOR_MB_INLET_TEMP = 0x07,
+    SENSOR_PCH_TEMP = 0x08,
+    SENSOR_SOC_TEMP = 0x05,
+    SENSOR_SOC_DIMMA_TEMP = 0xB4,
+    SENSOR_SOC_DIMMB_TEMP = 0xB6,
+    SENSOR_SOC_THERM_MARGIN = 0x09,
+};
+// List of sensors which need to do negative reading handle
+const uint8_t neg_reading_sensor_support_list[] = {
+    /* Temperature sensors*/
+    SENSOR_MB_OUTLET_TEMP, SENSOR_MB_INLET_TEMP,  SENSOR_PCH_TEMP,
+    SENSOR_SOC_TEMP,       SENSOR_SOC_DIMMA_TEMP, SENSOR_SOC_DIMMB_TEMP,
+};
+
+static constexpr uint8_t maxPosReadingMargin = 127;
+static constexpr uint16_t thermalConst = 256;
 
 static constexpr uint8_t netfnStorageReq = 0x0a;
 static constexpr uint8_t cmdStorageGetSdrInfo = 0x20;
@@ -88,31 +110,41 @@ static constexpr uint8_t sdrUnitType01 = 25;
 static constexpr uint8_t sdrUpCriType01 = 43;
 static constexpr uint8_t sdrLoCriType01 = 46;
 
+static constexpr uint8_t mDataByte = 28;
+static constexpr uint8_t mTolDataByte = 29;
+static constexpr uint8_t bDataByte = 30;
+static constexpr uint8_t bAcuDataByte = 31;
+static constexpr uint8_t rbExpDataBye = 33;
+static constexpr uint8_t bitShiftMsb = 6;
+
 static std::vector<std::string> sensorReadName;
 static std::vector<std::string> sensorUnit;
+static std::vector<double> thresUpperCri;
+static std::vector<double> thresLowerCri;
 static std::vector<uint32_t> ipmbBus;
-
-std::vector<uint8_t> sdrCommandData;
-std::vector<uint8_t> getSdrData;
-
+static std::vector<uint16_t> mValue;
+static std::vector<uint16_t> bValue;
 static std::vector<uint8_t> sensorNumber;
 static std::vector<uint8_t> sensorSDRType;
 static std::vector<uint8_t> sensorSDREvent;
-static std::vector<uint8_t> thresUpperCri;
-static std::vector<uint8_t> thresLowerCri;
+static std::vector<int8_t> rExp;
+static std::vector<int8_t> bExp;
+
+std::vector<uint8_t> sdrCommandData;
+std::vector<uint8_t> getSdrData;
 
 std::string sensorName;
 std::string sensorTypeName;
 std::string strUnit;
 std::string hostName;
 
+double upperCri;
+double lowerCri;
 uint16_t recordCount;
-
 uint8_t sdrCommandAddress;
 uint8_t sdrNetfn;
 uint8_t sdrCommand;
-uint8_t upperCri;
-uint8_t lowerCri;
+uint8_t curRecord;
 uint8_t dev_addr;
 uint8_t cmdAddr;
 uint8_t resrvIDLSB = 0;
