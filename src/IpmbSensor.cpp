@@ -50,8 +50,7 @@ static constexpr double ipmbMinReading = 0;
 static constexpr uint8_t meAddress = 1;
 static constexpr uint8_t lun = 0;
 static constexpr uint8_t hostSMbusIndexDefault = 0x03;
-int Bus;
-std::string sensorTypeName;
+
 static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
 static constexpr const char* versionPathPrefix =
     "/xyz/openbmc_project/software/";
@@ -135,8 +134,10 @@ void IpmbSensor::init(void)
         sensorInterface->set_property("Thres_UpperCritical", sdr::upperCri);
         sensorInterface->set_property("Thres_LowerCritical", sdr::lowerCri);
     }
-    if (sensorTypeName == "version")
+    if (versionTypeName == "version")
     {
+        printf("init func \n");
+        std::cout.flush();
         sensorInterface->register_property(
             "Version", std::string(""),
             sdbusplus::asio::PropertyPermission::readWrite);
@@ -535,7 +536,10 @@ void IpmbSensor::loadDefaults()
     {
         if (subType == IpmbSubType::version)
         {
-            commandAddress = Bus << 2;
+            printf("IN version sub type \n");
+            printf("Index %d \n", Index);
+            std::cout.flush();
+            commandAddress = Index << 2;
             netfn = ipmi::oem::netFn;
             command = ipmi::oem::command;
             commandData = {0x15, 0xa0, 0, deviceAddress};
@@ -645,6 +649,8 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
         }
         case (ReadingFormat::version):
         {
+            printf("Reading format \n");
+            std::cout.flush();
             std::string version;
             if (data.size() < 5)
             {
@@ -658,7 +664,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             for (int i = 3; i < data.size(); i++)
             {
                 version = version + std::to_string(data[i]);
-                if (i != data.size() - 1)
+                if ((i != (data.size()-1)) && (i != 6))
                 {
                     version = version + ".";
                 }
@@ -692,6 +698,8 @@ void IpmbSensor::read(void)
             [this](boost::system::error_code ec,
                    const IpmbMethodType& response) {
                 const int& status = std::get<0>(response);
+                printf("In read func \n");
+                std::cout.flush();
                 if (ec || status)
                 {
                     incrementError();
@@ -701,6 +709,8 @@ void IpmbSensor::read(void)
                 const std::vector<uint8_t>& data = std::get<5>(response);
                 if constexpr (debug)
                 {
+                    printf("In debug \n");
+                    std::cout.flush();
                     std::cout << name << ": ";
                     for (size_t d : data)
                     {
@@ -738,6 +748,8 @@ void IpmbSensor::read(void)
 
                 if (readingFormat != ReadingFormat::version)
                 {
+                    printf(" not version \n");
+                    std::cout.flush();
                     /* Adjust value as per scale and offset */
                     value = (value * scaleVal) + offsetVal;
                     updateValue(value);
@@ -849,8 +861,8 @@ void createSensors(
                     }
 
                     /* Default sensor type is "temperature" */
-//                    std::string sensorTypeName = "temperature";
-                    sensorTypeName = "temperature";
+                    std::string sensorTypeName = "temperature";
+//                    sensorTypeName = "temperature";
                     auto findType = entry.second.find("SensorType");
                     if (findType != entry.second.end())
                     {
@@ -863,6 +875,11 @@ void createSensors(
                         dbusConnection, io, name, pathPair.first, objectServer,
                         std::move(sensorThresholds), deviceAddress,
                         hostSMbusIndex, sensorTypeName);
+
+                    uint8_t Bus = loadVariant<uint8_t>(entry.second, "Bus");
+                    sensor->Index = Bus;
+                    printf(" INDEX : %d \n", Bus);
+                    std::cout.flush();
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;
@@ -942,6 +959,7 @@ void createSensors(
                     else if (sensorTypeName == "version")
                     {
                         sensor->subType = IpmbSubType::version;
+                        sensor->versionTypeName = sensorTypeName;
                     }
                     else
                     {
