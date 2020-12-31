@@ -123,16 +123,8 @@ void IpmbSensor::init(void)
         sensorInterface->register_property(
             "Unit", std::string(""),
             sdbusplus::asio::PropertyPermission::readWrite);
-        sensorInterface->register_property(
-            "Thres_UpperCritical", double(0),
-            sdbusplus::asio::PropertyPermission::readWrite);
-        sensorInterface->register_property(
-            "Thres_LowerCritical", double(0),
-            sdbusplus::asio::PropertyPermission::readWrite);
         setInitialProperties(dbusConnection);
         sensorInterface->set_property("Unit", sdr::strUnit);
-        sensorInterface->set_property("Thres_UpperCritical", sdr::upperCri);
-        sensorInterface->set_property("Thres_LowerCritical", sdr::lowerCri);
     }
     if (versionTypeName == "version")
     {
@@ -243,9 +235,16 @@ void sdr::ipmbGetSdrInfo(
     reply.read(resp);
 
     std::vector<uint8_t> data;
-    data = std::get<5>(resp);
 
-    recordCount = (((data.at(2) << 8) & 0xFF00) | data.at(1));
+    data = std::get<5>(resp);
+    if (data.size() > 1)
+    {
+        recordCount = (((data[2] << 8) & 0xFF00) | data[1]);
+    }
+    else
+    {
+        return;
+    }
 }
 
 void sdr::ipmbSdrRsrv(
@@ -274,9 +273,15 @@ void sdr::ipmbSdrRsrv(
 
     std::vector<uint8_t> data;
     data = std::get<5>(resp);
-
-    resrvIDLSB = data.at(0);
-    resrvIDMSB = data.at(1);
+    if (data.size() > 1)
+    {
+        resrvIDLSB = data[0];
+        resrvIDMSB = data[1];
+    }
+    else
+    {
+        return;
+    }
 }
 
 void sdr::ipmbGetSdr(
@@ -788,6 +793,8 @@ void IpmbSensor::sdrRead(void)
     if (!processReading(data, value))
     {
         std::cerr << "Reading Unknown Value from " << sdr::sensorName << "\n";
+        markFunctional(false);
+        return;
     }
     if (readingFormat != ReadingFormat::sdrStEvt)
     {
@@ -1005,30 +1012,37 @@ void createObj(boost::asio::io_service& io,
     {
         std::cerr << "Error communicating to entity manager\n";
     }
-    for (int i = 0; i < sdr::recordCount; i++)
+    for (int iCount = 0; iCount < sdr::recordCount; iCount++)
     {
-        sdr::dev_addr = sdr::sensorNumber[i];
-        sdr::sensorName = sdr::hostName + sdr::sensorReadName[i];
+        sdr::dev_addr = sdr::sensorNumber[iCount];
+        sdr::sensorName = sdr::hostName + sdr::sensorReadName[iCount];
+        uint8_t hostSMbusIndex = hostSMbusIndexDefault;
+        std::string sensorConPath = sensorPathPrefix + sdr::sensorName;
 
-        if (sdr::sensorSDRType[i] == sdr::sdrType01)
+        std::vector<thresholds::Threshold> sensorThresholds;
+
+        if (sdr::sensorSDRType[iCount] == sdr::sdrType01)
         {
             sdr::sensorTypeName = "SDR_Type_01";
+            sensorThresholds.emplace_back(thresholds::Level::CRITICAL,
+                                          thresholds::Direction::HIGH,
+                                          sdr::thresUpperCri[iCount]);
+            sensorThresholds.emplace_back(thresholds::Level::CRITICAL,
+                                          thresholds::Direction::LOW,
+                                          sdr::thresLowerCri[iCount]);
         }
-        else if (sdr::sensorSDRType[i] == sdr::sdrType02)
+        else if (sdr::sensorSDRType[iCount] == sdr::sdrType02)
         {
             sdr::sensorTypeName = "SDR_Type_02";
         }
-        else if (sdr::sensorSDRType[i] == sdr::sdrType03)
+        else if (sdr::sensorSDRType[iCount] == sdr::sdrType03)
         {
             sdr::sensorTypeName = "SDR_Type_03";
         }
 
-        std::vector<thresholds::Threshold> sensorThresholds;
-        uint8_t hostSMbusIndex = hostSMbusIndexDefault;
-
         auto& sensor = sensors[sdr::sensorName];
         sensor = std::make_unique<IpmbSensor>(
-            dbusConnection, io, sdr::sensorName, sdr::sensorName, objectServer,
+            dbusConnection, io, sdr::sensorName, sensorConPath, objectServer,
             std::move(sensorThresholds), sdr::dev_addr, hostSMbusIndex,
             sdr::sensorTypeName);
 
@@ -1039,10 +1053,8 @@ void createObj(boost::asio::io_service& io,
         if (sdr::sensorTypeName == "SDR_Type_01")
         {
             sensor->type = IpmbType::SDRType;
-            sdr::strUnit = sdr::sensorUnit[i];
-            sdr::upperCri = sdr::thresUpperCri[i];
-            sdr::lowerCri = sdr::thresLowerCri[i];
-            sdr::curRecord = i;
+            sdr::strUnit = sdr::sensorUnit[iCount];
+            sdr::curRecord = iCount;
 
             sensor->init();
         }
