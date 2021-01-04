@@ -126,7 +126,7 @@ void IpmbSensor::init(void)
         setInitialProperties(dbusConnection);
         sensorInterface->set_property("Unit", sdr::strUnit);
     }
-    if (versionTypeName == "version")
+    else if (versionTypeName == "version")
     {
         printf("init func \n");
         std::cout.flush();
@@ -156,6 +156,8 @@ void IpmbSensor::init(void)
     }
     else
     {
+        printf("In else for calling read func \n");
+        std::cout.flush();
         read();
     }
 }
@@ -669,7 +671,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             for (int i = 3; i < data.size(); i++)
             {
                 version = version + std::to_string(data[i]);
-                if ((i != (data.size()-1)) && (i != 6))
+                if ((i != (data.size() - 1)) && (i != 6))
                 {
                     version = version + ".";
                 }
@@ -685,6 +687,9 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
 
 void IpmbSensor::read(void)
 {
+    printf("Read func \n");
+    std::cout.flush();
+
     static constexpr size_t pollTime = 1; // in seconds
 
     waitTimer.expires_from_now(boost::posix_time::seconds(pollTime));
@@ -851,9 +856,6 @@ void createSensors(
                                   << "\n";
                     }
 
-                    printf(" json details \n");
-                    std::cout.flush();
-
                     uint8_t deviceAddress =
                         loadVariant<uint8_t>(entry.second, "Address");
 
@@ -869,7 +871,6 @@ void createSensors(
 
                     /* Default sensor type is "temperature" */
                     std::string sensorTypeName = "temperature";
-//                    sensorTypeName = "temperature";
                     auto findType = entry.second.find("SensorType");
                     if (findType != entry.second.end())
                     {
@@ -885,8 +886,6 @@ void createSensors(
 
                     uint8_t Bus = loadVariant<uint8_t>(entry.second, "Bus");
                     sensor->Index = Bus;
-                    printf(" INDEX : %d \n", Bus);
-                    std::cout.flush();
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;
