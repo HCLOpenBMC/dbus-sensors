@@ -105,13 +105,18 @@ IpmbSensor::~IpmbSensor()
 void IpmbSensor::init(void)
 {
     loadDefaults();
-    if (sdr::sdrTypeName == "SDR_Type_01")
+    if ((readingFormat == ReadingFormat::sdrTyp) ||
+        (readingFormat == ReadingFormat::sdrStEvt))
     {
-        sensorInterface->register_property(
-            "Unit", std::string(""),
-            sdbusplus::asio::PropertyPermission::readWrite);
+        if (readingFormat == ReadingFormat::sdrTyp)
+        {
+            sensorInterface->register_property(
+                "Unit", std::string(""),
+                sdbusplus::asio::PropertyPermission::readWrite);
+        }
         setInitialProperties(dbusConnection);
-        sensorInterface->set_property("Unit", sdr::strUnit);
+        sdrRead();
+        return;
     }
     else
     {
@@ -123,16 +128,7 @@ void IpmbSensor::init(void)
         runInitCmd();
     }
 
-    if ((sdr::sdrTypeName == "SDR_Type_01") ||
-        (sdr::sdrTypeName == "SDR_Type_02") ||
-        (sdr::sdrTypeName == "SDR_Type_03"))
-    {
-        sdrRead();
-    }
-    else
-    {
-        read();
-    }
+    read();
 }
 
 void IpmbSensor::runInitCmd()
@@ -595,6 +591,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
         }
         case (ReadingFormat::sdrTyp):
         {
+            sensorInterface->set_property("Unit", sdr::strUnit);
             if (command == ipmi::sensor::getSensorReading &&
                 !ipmi::sensor::isValid(data))
             {
