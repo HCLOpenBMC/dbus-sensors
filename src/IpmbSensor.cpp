@@ -77,24 +77,33 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
     deviceAddress(deviceAddress), hostSMbusIndex(hostSMbusIndex),
     objectServer(objectServer), waitTimer(io)
 {
-    std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
-
-    sensorInterface = objectServer.add_interface(
-        dbusPath, "xyz.openbmc_project.Sensor.Value");
-
-    if (thresholds::hasWarningInterface(thresholds))
+    if (sensorTypeName == "version")
     {
-        thresholdInterfaceWarning = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+        std::string dbusPath = versionPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Software.Version");
     }
-    if (thresholds::hasCriticalInterface(thresholds))
+    else
     {
-        thresholdInterfaceCritical = objectServer.add_interface(
-            dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+        std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
+
+        sensorInterface = objectServer.add_interface(
+            dbusPath, "xyz.openbmc_project.Sensor.Value");
+
+        if (thresholds::hasWarningInterface(thresholds))
+        {
+            thresholdInterfaceWarning = objectServer.add_interface(
+                dbusPath, "xyz.openbmc_project.Sensor.Threshold.Warning");
+        }
+        if (thresholds::hasCriticalInterface(thresholds))
+        {
+            thresholdInterfaceCritical = objectServer.add_interface(
+                dbusPath, "xyz.openbmc_project.Sensor.Threshold.Critical");
+        }
+        association =
+            objectServer.add_interface(dbusPath, association::interface);
     }
-    association =
-        objectServer.add_interface(dbusPath, association::interface);
-  
 }
 
 IpmbSensor::~IpmbSensor()
@@ -139,9 +148,7 @@ void IpmbSensor::init(void)
         runInitCmd();
     }
 
-    if ((sdr::sdrTypeName == "SDR_Type_01") ||
-        (sdr::sdrTypeName == "SDR_Type_02") ||
-        (sdr::sdrTypeName == "SDR_Type_03"))
+    if ( (readingFormat == ReadingFormat::sdrStEvt) || (readingFormat == ReadingFormat::sdrStEvt) )
     {
         sdrRead();
     }
@@ -875,8 +882,13 @@ void createSensors(
                         std::move(sensorThresholds), deviceAddress,
                         hostSMbusIndex, sensorTypeName);
 
-                    uint8_t Bus = loadVariant<uint8_t>(entry.second, "Bus");
-                    sensor->Index = Bus;
+                    auto findBusType = entry.second.find("Bus");
+                    if (findBusType != entry.second.end())
+                    {
+                        uint8_t Bus = std::visit(
+                            VariantToUnsignedIntVisitor(), findBusType->second);
+                        sensor->Index = Bus;
+                    }
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;
