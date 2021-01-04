@@ -148,16 +148,7 @@ void IpmbSensor::init(void)
         runInitCmd();
     }
 
-    if ( (readingFormat == ReadingFormat::sdrStEvt) || (readingFormat == ReadingFormat::sdrStEvt) )
-    {
-        sdrRead();
-    }
-    else
-    {
-        printf("In else for calling read func \n");
-        std::cout.flush();
-        read();
-    }
+    read();
 }
 
 void IpmbSensor::runInitCmd()
