@@ -137,7 +137,7 @@ std::vector<uint8_t> sdrCommandData;
 std::vector<uint8_t> getSdrData;
 
 std::string sensorName;
-std::string sensorTypeName;
+std::string sdrTypeName;
 std::string strUnit;
 std::string hostName;
 
