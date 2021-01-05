@@ -19,8 +19,7 @@ enum class IpmbType
     ADM1278HSC,
     mpsVR,
     SDRType,
-    SDRStEvtType,
-    version
+    SDRStEvtType
 };
 
 enum class IpmbSubType
@@ -40,8 +39,7 @@ enum class ReadingFormat
     elevenBit,
     elevenBitShift,
     sdrTyp,
-    sdrStEvt,
-    version
+    sdrStEvt
 };
 
 std::vector<std::string> Sensor_Unit{"unspecified", "degrees C", "degrees F",
