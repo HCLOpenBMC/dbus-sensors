@@ -651,8 +651,6 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
         }
         case (ReadingFormat::version):
         {
-            printf("Reading format \n");
-            std::cout.flush();
             std::string version;
             if (data.size() < 5)
             {
@@ -682,9 +680,6 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
 
 void IpmbSensor::read(void)
 {
-    printf("Read func \n");
-    std::cout.flush();
-
     static constexpr size_t pollTime = 1; // in seconds
 
     waitTimer.expires_from_now(boost::posix_time::seconds(pollTime));
@@ -703,8 +698,6 @@ void IpmbSensor::read(void)
             [this](boost::system::error_code ec,
                    const IpmbMethodType& response) {
                 const int& status = std::get<0>(response);
-                printf("In read func \n");
-                std::cout.flush();
                 if (ec || status)
                 {
                     incrementError();
@@ -753,8 +746,6 @@ void IpmbSensor::read(void)
 
                 if (readingFormat != ReadingFormat::version)
                 {
-                    printf(" not version \n");
-                    std::cout.flush();
                     /* Adjust value as per scale and offset */
                     value = (value * scaleVal) + offsetVal;
                     updateValue(value);
