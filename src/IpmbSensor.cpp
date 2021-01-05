@@ -105,10 +105,10 @@ IpmbSensor::~IpmbSensor()
 void IpmbSensor::init(void)
 {
     loadDefaults();
-    if ((readingFormat == ReadingFormat::sdrTyp) ||
-        (readingFormat == ReadingFormat::sdrStEvt))
+    if ((readingFormat == ReadingFormat::sdrThres) ||
+        (readingFormat == ReadingFormat::sdrDiscEvt))
     {
-        if (readingFormat == ReadingFormat::sdrTyp)
+        if (readingFormat == ReadingFormat::sdrThres)
         {
             sensorInterface->register_property(
                 "Unit", std::string(""),
@@ -315,20 +315,22 @@ void sdr::sdrDataProcess()
     std::string tempName = "";
     int iStrAddr = 0;
     int iStrLen = 0;
+    int sensCapb = 0;
     int isdrType = getSdrData[sdrType];
 
     nextRecordIDLSB = getSdrData[sdrNxtRecLSB];
     nextRecordIDMSB = getSdrData[sdrNxtRecMSB];
 
-    sensorSDRType.push_back(getSdrData[sdrType]);
-    sensorNumber.push_back(getSdrData[sdrSenNum]);
-
     if (isdrType == sdrType01)
     {
+        sensCapb = (getSdrData[sdrSensCapab] & sdrThresAcce);
+        if (sensCapb == sdrSensNoThres)
+        {
+            return;
+        }
         iStrAddr = sdrAdrType01;
         iStrLen = (getSdrData[sdrLenType01] & sdrLenBit);
 
-        sensorSDREvent.push_back(getSdrData[sdrEveType01]);
         sensorUnit.push_back(Sensor_Unit[getSdrData[sdrUnitType01]]);
 
         mData = ((getSdrData[mTolDataByte] >> bitShiftMsb) << 8) |
@@ -366,13 +368,11 @@ void sdr::sdrDataProcess()
     {
         iStrAddr = sdrAdrType02;
         iStrLen = (getSdrData[sdrLenType02] & sdrLenBit);
-        sensorSDREvent.push_back(getSdrData[sdrEveType02]);
     }
     else if (isdrType == sdrType03)
     {
         iStrAddr = sdrAdrType03;
         iStrLen = (getSdrData[sdrLenType03] & sdrLenBit);
-        sensorSDREvent.push_back(getSdrData[sdrEveType03]);
     }
     for (int iLoop = 0; iLoop < iStrLen; iLoop++)
     {
@@ -381,6 +381,10 @@ void sdr::sdrDataProcess()
     }
     sensorReadName.push_back(tempName);
     tempName.clear();
+
+    sensorSDRType.push_back(getSdrData[sdrType]);
+    sensorNumber.push_back(getSdrData[sdrSenNum]);
+    validRecordCount++;
 }
 
 double sdr::dataConversion(double conValue, uint8_t recCount)
@@ -492,21 +496,21 @@ void IpmbSensor::loadDefaults()
                     0x02,          0x00, 0x00, 0x00};
         readingFormat = ReadingFormat::byte3;
     }
-    else if (type == IpmbType::SDRType)
+    else if (type == IpmbType::SDRThresSensor)
     {
         commandAddress = sdr::cmdAddr;
         netfn = ipmi::sensor::netFn;
         command = ipmi::sensor::getSensorReading;
         commandData = {sdr::dev_addr};
-        readingFormat = ReadingFormat::sdrTyp;
+        readingFormat = ReadingFormat::sdrThres;
     }
-    else if (type == IpmbType::SDRStEvtType)
+    else if (type == IpmbType::SDRDiscEvtSensor)
     {
         commandAddress = sdr::cmdAddr;
         netfn = ipmi::sensor::netFn;
         command = ipmi::sensor::getSensorReading;
         commandData = {sdr::dev_addr};
-        readingFormat = ReadingFormat::sdrStEvt;
+        readingFormat = ReadingFormat::sdrDiscEvt;
     }
     else
     {
@@ -589,7 +593,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             resp = ((data[4] << 8) | data[3]) >> 3;
             return true;
         }
-        case (ReadingFormat::sdrTyp):
+        case (ReadingFormat::sdrThres):
         {
             sensorInterface->set_property("Unit", sdr::strUnit);
             if (command == ipmi::sensor::getSensorReading &&
@@ -600,7 +604,7 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
             resp = data[0];
             return true;
         }
-        case (ReadingFormat::sdrStEvt):
+        case (ReadingFormat::sdrDiscEvt):
         {
             if (command == ipmi::sensor::getSensorReading &&
                 !ipmi::sensor::isValid(data))
@@ -720,7 +724,7 @@ void IpmbSensor::sdrRead(void)
         markFunctional(false);
         return;
     }
-    if (readingFormat != ReadingFormat::sdrStEvt)
+    if (readingFormat != ReadingFormat::sdrDiscEvt)
     {
         value = sdr::dataConversion(value, sdr::curRecord);
         /* Adjust value as per scale and offset */
@@ -912,7 +916,7 @@ void createObj(boost::asio::io_service& io,
     {
         std::cerr << "Error communicating to entity manager\n";
     }
-    for (int iCount = 0; iCount < sdr::recordCount; iCount++)
+    for (int iCount = 0; iCount < sdr::validRecordCount; iCount++)
     {
         sdr::dev_addr = sdr::sensorNumber[iCount];
         sdr::sensorName = sdr::hostName + sdr::sensorReadName[iCount];
@@ -920,11 +924,10 @@ void createObj(boost::asio::io_service& io,
         std::string sensorConPath = sensorPathPrefix + sdr::sensorName;
 
         std::vector<thresholds::Threshold> sensorThresholds;
-        std::string sensorTypeName = "SDR_Sensor";
+        std::string sdrSensorTypeName = "SDR_Sensor";
 
         if (sdr::sensorSDRType[iCount] == sdr::sdrType01)
         {
-            sdr::sdrTypeName = "SDR_Type_01";
             sensorThresholds.emplace_back(thresholds::Level::CRITICAL,
                                           thresholds::Direction::HIGH,
                                           sdr::thresUpperCri[iCount]);
@@ -932,28 +935,19 @@ void createObj(boost::asio::io_service& io,
                                           thresholds::Direction::LOW,
                                           sdr::thresLowerCri[iCount]);
         }
-        else if (sdr::sensorSDRType[iCount] == sdr::sdrType02)
-        {
-            sdr::sdrTypeName = "SDR_Type_02";
-        }
-        else if (sdr::sensorSDRType[iCount] == sdr::sdrType03)
-        {
-            sdr::sdrTypeName = "SDR_Type_03";
-        }
-
         auto& sensor = sensors[sdr::sensorName];
         sensor = std::make_unique<IpmbSensor>(
             dbusConnection, io, sdr::sensorName, sensorConPath, objectServer,
             std::move(sensorThresholds), sdr::dev_addr, hostSMbusIndex,
-            sensorTypeName);
+            sdrSensorTypeName);
 
         /* Initialize scale and offset value */
         sensor->scaleVal = 1;
         sensor->offsetVal = 0;
         setReadState("Always", sensor->readState);
-        if (sdr::sdrTypeName == "SDR_Type_01")
+        if (sdr::sensorSDRType[iCount] == sdr::sdrType01)
         {
-            sensor->type = IpmbType::SDRType;
+            sensor->type = IpmbType::SDRThresSensor;
             sdr::strUnit = sdr::sensorUnit[iCount];
             sdr::curRecord = iCount;
 
@@ -961,7 +955,7 @@ void createObj(boost::asio::io_service& io,
         }
         else
         {
-            sensor->type = IpmbType::SDRStEvtType;
+            sensor->type = IpmbType::SDRDiscEvtSensor;
             sensor->init();
         }
     }
@@ -1024,6 +1018,7 @@ int main()
     findObjects(systemBus);
     for (int iter = 0; iter < sdr::ipmbBus.size(); iter++)
     {
+        sdr::validRecordCount = 0;
         sdr::cmdAddr = sdr::ipmbBus.at(iter) << 2;
         sdr::hostName = std::to_string(sdr::ipmbBus.at(iter) + 1) + "-";
 
