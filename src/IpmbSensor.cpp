@@ -542,9 +542,9 @@ void IpmbSensor::loadDefaults()
         if (subType == IpmbSubType::version)
         {
             printf("IN version sub type \n");
-            printf("Index %d \n", Index);
+            printf("Index %d \n", index);
             std::cout.flush();
-            commandAddress = Index << 2;
+            commandAddress = index << 2;
             netfn = ipmi::oem::netFn;
             command = ipmi::oem::command;
             commandData = {0x15, 0xa0, 0, deviceAddress};
@@ -877,9 +877,8 @@ void createSensors(
                     auto findBusType = entry.second.find("Bus");
                     if (findBusType != entry.second.end())
                     {
-                        uint8_t Bus = std::visit(
+                        sensor->index = std::visit(
                             VariantToUnsignedIntVisitor(), findBusType->second);
-                        sensor->Index = Bus;
                     }
 
                     /* Initialize scale and offset value */
