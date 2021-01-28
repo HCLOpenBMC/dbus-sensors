@@ -83,6 +83,7 @@ std::string sdrSensorType;
 uint8_t reqIID;
 uint8_t pldmType;
 uint8_t pldmSensorCmd;
+uint8_t mctp_eid;
 
 using IpmbMethodType =
     std::tuple<int, uint8_t, uint8_t, uint8_t, uint8_t, std::vector<uint8_t>>;
@@ -199,18 +200,11 @@ void PldmSensor::checkThresholds(void)
     thresholds::checkThresholds(this);
 }
 
-#if 0
-bool PldmSensor::processReading(const std::vector<uint8_t>& data, double& resp)
-{
-}
-#endif
-
 void PldmSensor::read(void)
 {
-    printf("inside Read \n");
+    printf("inside Read-1 \n");
     std::cout.flush();
-
-    uint16_t sensorId = 0x1234;
+    uint16_t sensorId = 0x0001;
     bool8_t rearmEventState = 0x01;
 
     std::vector<uint8_t> requestMsg(sizeof(pldm_msg_hdr) +
@@ -220,8 +214,11 @@ void PldmSensor::read(void)
     auto rc =
         encode_get_sensor_reading_req(0, sensorId, rearmEventState, request);
 
+    printf("Data Encode %X %X %X %X \n", request->hdr.command,
+           request->payload[0], request->payload[1], request->payload[2]);
+    std::cout.flush();
     /** @brief MCTP EID of host firmware */
-    uint8_t mctp_eid;
+    constexpr uint8_t PLDM_ENTITY_ID = 8;
     const uint8_t MCTP_MSG_TYPE_PLDM = 1;
     std::vector<uint8_t> responseMsg;
     // Insert the PLDM message type and EID at the beginning of the
@@ -229,7 +226,7 @@ void PldmSensor::read(void)
     requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
     requestMsg.insert(requestMsg.begin(), mctp_eid);
 
-    // if (mctp_eid != PLDM_ENTITY_ID)
+    if (mctp_eid != PLDM_ENTITY_ID)
     {
         int fd = pldm_open();
         if (-1 == fd)
@@ -240,18 +237,18 @@ void PldmSensor::read(void)
         }
         uint8_t* responseMessage = nullptr;
         size_t responseMessageSize{};
+    printf("trace-1 \n");
+    std::cout.flush();
         pldm_send_recv(mctp_eid, fd, requestMsg.data() + 2,
                        requestMsg.size() - 2, &responseMessage,
                        &responseMessageSize);
-
-        //        Logger(pldmVerbose, "Response Message:", "");
+    printf("trace-2 \n");
+    std::cout.flush();
         responseMsg.resize(responseMessageSize);
         memcpy(responseMsg.data(), responseMessage, responseMsg.size());
 
         free(responseMessage);
-        //      printBuffer(responseMsg, pldmVerbose);
     }
-#if 0
     else
     {
         mctpSockSendRecv(requestMsg, responseMsg, mctpVerbose);
@@ -260,8 +257,10 @@ void PldmSensor::read(void)
         responseMsg.erase(responseMsg.begin(),
                           responseMsg.begin() + 2 /* skip the mctp header */);
     }
-#endif
 
+    auto responsePtr = reinterpret_cast<struct pldm_msg*>(responseMsg.data());
+    printf("Read-2 \n");
+    std::cout.flush();
     constexpr auto hdrSize = sizeof(pldm_msg_hdr);
     std::array<uint8_t, hdrSize + PLDM_GET_SENSOR_READING_MIN_RESP_BYTES + 3>
         responseMsg1{};
@@ -277,8 +276,7 @@ void PldmSensor::read(void)
     uint8_t retpresentReading[4];
 
     auto rcDec = decode_get_sensor_reading_resp(
-        // responsePtr, responseMsg.size() - hdrSize, &retcompletionCode,
-        request, responseMsg1.size() - hdrSize, &retcompletionCode,
+        responsePtr, responseMsg1.size() - hdrSize, &retcompletionCode,
         &retsensor_dataSize, &retsensor_operationalState,
         &retsensor_event_messageEnable, &retpresentState, &retpreviousState,
         &reteventState, retpresentReading);
@@ -289,6 +287,10 @@ void PldmSensor::read(void)
                   << "rc=" << rc << ",cc=" << (int)completionCode << "\n";
         return;
     }
+
+    updateValue(retpresentReading[0]);
+    printf("Read-3 \n");
+    std::cout.flush();
 }
 
 void createSensors(
@@ -337,9 +339,12 @@ void createSensors(
                     {
                         sensorID = loadVariant<std::uint16_t>(entry.second,
                                                               "SensorID");
+                        mctp_eid = loadVariant<std::uint8_t>(entry.second,
+                                                              "MctpID");
                         sdrSensorType = readType;
                         std::cerr << "Sens Type " << readType << "\n";
                         std::cerr << "Pldm " << sdrSensorType << "\n";
+                        std::cerr << "mctp_eid " << mctp_eid << "\n";
                         std::cout.flush();
                     }
 
@@ -439,21 +444,6 @@ int main()
     io.post([&]() { createSensors(io, objectServer, sensors, systemBus); });
 
     boost::asio::deadline_timer configTimer(io);
-
-    printf("Before Encode \n");
-    std::cout.flush();
-    uint16_t sensorId = 0x7839;
-    bool8_t rearmEventState = 0x01;
-
-    std::vector<uint8_t> requestMsg(sizeof(pldm_msg_hdr) +
-                                    PLDM_GET_SENSOR_READING_REQ_BYTES);
-
-    auto request = reinterpret_cast<pldm_msg*>(requestMsg.data());
-    auto rc =
-        encode_get_sensor_reading_req(0, sensorId, rearmEventState, request);
-    printf("After Encode %X %X %X %X \n", request->hdr.command,
-           request->payload[0], request->payload[1], request->payload[2]);
-    std::cout.flush();
 
     std::function<void(sdbusplus::message::message&)> eventHandler =
         [&](sdbusplus::message::message&) {
