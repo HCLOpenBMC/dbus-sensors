@@ -78,10 +78,10 @@ set (PSU_SRC_FILES src/Utils.cpp src/PSUSensor.cpp src/Thresholds.cpp
 
 set (NVME_SRC_FILES src/Utils.cpp src/NVMeSensorMain.cpp src/NVMeSensor.cpp src/Thresholds.cpp)
 
-set (EXTERNAL_PACKAGES Boost sdbusplus-project nlohmann-json pldm)
-set (SENSOR_LINK_LIBS -lsystemd stdc++fs sdbusplus -lpldm)
+set (EXTERNAL_PACKAGES Boost sdbusplus-project nlohmann-json pldm libnl)
+set (SENSOR_LINK_LIBS -lsystemd stdc++fs sdbusplus -lpldm libnl-3.0 libnl-genl-3.0)
 
-set (PLDM_SRC_FILES src/Utils.cpp src/Thresholds.cpp)
+set (PLDM_SRC_FILES src/Utils.cpp src/Thresholds.cpp src/ncsi_util.cpp)
 
 if (NOT YOCTO)
     set (DISABLE_NVME ON) # todo allow this to build out of tree
@@ -200,6 +200,8 @@ add_dependencies (psusensor sdbusplus-project)
 target_link_libraries (psusensor ${SENSOR_LINK_LIBS})
 
 add_executable (pldmsensor src/PldmSensor.cpp ${PLDM_SRC_FILES})
+add_dependencies (pldmsensor ${EXTERNAL_PACKAGES})
+include_directories("/usr/include/libnl3")
 target_link_libraries (pldmsensor ${SENSOR_LINK_LIBS})
 
 if (NOT DISABLE_NVME)

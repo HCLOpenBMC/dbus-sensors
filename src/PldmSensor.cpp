@@ -43,6 +43,11 @@
 #include <variant>
 #include <vector>
 
+#include "ncsi_util.hpp"
+
+extern ncsi_data_len;
+extern  ncsi_data;
+
 constexpr const bool debug = false;
 
 constexpr const char* configInterface =
@@ -226,7 +231,24 @@ void PldmSensor::read(void)
     requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
     requestMsg.insert(requestMsg.begin(), mctp_eid);
 
-    if (mctp_eid != PLDM_ENTITY_ID)
+         int package = 0;
+    int channel = 0;
+    int ifindex = 2;
+    int opcode  = 81;
+    short payload_length = 12;
+    uint8_t* payload = &requestMsg[0];
+
+    sendCommand(ifindex, package, channel, opcode, payload_length, payload);
+
+    printf("NCSI Response Payload length = %d\n", ncsi_data_len);
+    printf("Response Payload:\n");
+    for (int i = 0; i < ncsi_data_len; ++i) {
+        printf("0x%02x ", *(ncsi_data+i));
+    }
+    printf("\n");
+
+
+    /*if (mctp_eid != PLDM_ENTITY_ID)
     {
         int fd = pldm_open();
         if (-1 == fd)
@@ -255,7 +277,7 @@ void PldmSensor::read(void)
         Logger(pldmVerbose, "Response Message:", "");
         printBuffer(responseMsg, pldmVerbose);
         responseMsg.erase(responseMsg.begin(),
-                          responseMsg.begin() + 2 /* skip the mctp header */);
+                          responseMsg.begin() + 2 ;
     }
 
     auto responsePtr = reinterpret_cast<struct pldm_msg*>(responseMsg.data());
@@ -290,7 +312,7 @@ void PldmSensor::read(void)
 
     updateValue(retpresentReading[0]);
     printf("Read-3 \n");
-    std::cout.flush();
+    std::cout.flush(); */
 }
 
 void createSensors(
