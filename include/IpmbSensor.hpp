@@ -230,6 +230,7 @@ struct IpmbSensor : public Sensor
     std::vector<uint8_t> initData;
 
     std::string versionTypeName;
+    uint8_t pollTimeValue;
     uint8_t index;
 
     ReadingFormat readingFormat;

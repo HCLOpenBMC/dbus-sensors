@@ -50,6 +50,7 @@ static constexpr double ipmbMinReading = 0;
 static constexpr uint8_t meAddress = 1;
 static constexpr uint8_t lun = 0;
 static constexpr uint8_t hostSMbusIndexDefault = 0x03;
+static constexpr int pollTimeDefault = 1; // in seconds
 
 static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
 static constexpr const char* versionPathPrefix =
@@ -128,7 +129,7 @@ void IpmbSensor::init(void)
                 sdbusplus::asio::PropertyPermission::readWrite);
         }
         setInitialProperties(dbusConnection);
-        sdrRead();
+        read();
         return;
     }
     else if (versionTypeName == "version")
@@ -414,6 +415,8 @@ void sdr::sdrDataProcess()
 
 double sdr::dataConversion(double conValue, uint8_t recCount)
 {
+    printf(" >>>> DATA CONVERSION <<< \n");
+    std::cout.flush();
     double dataCon;
     dataCon = ((mValue[recCount] * conValue) +
                (bValue[recCount] * pow(10, bExp[recCount]))) *
@@ -684,7 +687,10 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
 
 void IpmbSensor::read(void)
 {
-    static constexpr size_t pollTime = 1; // in seconds
+    int pollTime = pollTimeValue; // in seconds
+
+    printf(" POLL Time : %d : %d \n ",pollTime,pollTimeValue);
+    std::cout.flush();
 
     waitTimer.expires_from_now(boost::posix_time::seconds(pollTime));
     waitTimer.async_wait([this](const boost::system::error_code& ec) {
@@ -750,6 +756,13 @@ void IpmbSensor::read(void)
 
                 if (readingFormat != ReadingFormat::version)
                 {
+                    /* Adjust value as per scale and offset */
+                    value = (value * scaleVal) + offsetVal;
+                    updateValue(value);
+                }
+                else if (readingFormat != ReadingFormat::sdrDiscEvt)
+                {
+                    value = sdr::dataConversion(value, sdr::curRecord);
                     /* Adjust value as per scale and offset */
                     value = (value * scaleVal) + offsetVal;
                     updateValue(value);
@@ -838,6 +851,9 @@ void createSensors(
                     std::string name =
                         loadVariant<std::string>(entry.second, "Name");
 
+                    std::cout << "Name : " << name << "\n";
+                    std::cout.flush();
+
                     std::vector<thresholds::Threshold> sensorThresholds;
                     if (!parseThresholdsFromConfig(pathPair.second,
                                                    sensorThresholds))
@@ -880,6 +896,18 @@ void createSensors(
                         sensor->index = std::visit(
                             VariantToUnsignedIntVisitor(), findBusType->second);
                     }
+
+                    auto pollTimeValue = pollTimeDefault;
+                    int val = pollTimeDefault;
+                    auto findPollTime = entry.second.find("PollTime");
+                    if (findPollTime != entry.second.end())
+                    {
+                        val = std::visit(
+                            VariantToDoubleVisitor(), findPollTime->second);
+                        sensor->pollTimeValue = val;
+                    }
+                    printf(" Poll Time Value : %d \n",val);
+                    std::cout.flush();
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;
