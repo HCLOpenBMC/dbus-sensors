@@ -84,6 +84,8 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
 
         sensorInterface = objectServer.add_interface(
             dbusPath, "xyz.openbmc_project.Software.Version");
+        printf(" Dbus path : %s \n",dbusPath);
+        std::cout.flush();
     }
     else
     {
@@ -897,7 +899,7 @@ void createSensors(
                             VariantToUnsignedIntVisitor(), findBusType->second);
                     }
 
-                    auto pollTimeValue = pollTimeDefault;
+                    int pollTimeValue = pollTimeDefault;
                     int val = pollTimeDefault;
                     auto findPollTime = entry.second.find("PollTime");
                     if (findPollTime != entry.second.end())
