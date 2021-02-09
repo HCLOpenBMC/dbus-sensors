@@ -904,9 +904,8 @@ void createSensors(
                     auto findPollTime = entry.second.find("PollTime");
                     if (findPollTime != entry.second.end())
                     {
-                        val = std::visit(
-                            VariantToDoubleVisitor(), findPollTime->second);
-                        sensor->pollTimeValue = val;
+                        sensor->pollTimeValue = std::visit(
+                            VariantToIntVisitor(), findPollTime->second);
                     }
                     printf(" Poll Time Value : %d \n",val);
                     std::cout.flush();
