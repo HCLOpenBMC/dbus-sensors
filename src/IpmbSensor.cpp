@@ -131,7 +131,7 @@ void IpmbSensor::init(void)
                 sdbusplus::asio::PropertyPermission::readWrite);
         }
         setInitialProperties(dbusConnection);
-        read();
+        sdrRead();
         return;
     }
     else if (versionTypeName == "version")
@@ -762,13 +762,10 @@ void IpmbSensor::read(void)
                     value = (value * scaleVal) + offsetVal;
                     updateValue(value);
                 }
-                else if (readingFormat != ReadingFormat::sdrDiscEvt)
-                {
-                    value = sdr::dataConversion(value, sdr::curRecord);
-                    /* Adjust value as per scale and offset */
-                    value = (value * scaleVal) + offsetVal;
-                    updateValue(value);
-                }
+
+                /* Adjust value as per scale and offset */
+                value = (value * scaleVal) + offsetVal;
+                updateValue(value);
                 read();
             },
             "xyz.openbmc_project.Ipmi.Channel.Ipmb",
