@@ -43,6 +43,15 @@
 #include <variant>
 #include <vector>
 
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stdlib.h>
+#include <netinet/in.h>
+#include <string.h>
+
+
 constexpr const bool debug = false;
 
 constexpr const char* configInterface =
@@ -147,7 +156,7 @@ void PldmSensor::init(void)
         runInitCmd();
     }
 #endif
-    read();
+    read1();
 }
 
 
@@ -200,15 +209,16 @@ void PldmSensor::checkThresholds(void)
     thresholds::checkThresholds(this);
 }
 
-void PldmSensor::read(void)
+int PldmSensor::read1(void)
 {
     printf("inside Read-1 \n");
     std::cout.flush();
     uint16_t sensorId = 0x0001;
     bool8_t rearmEventState = 0x01;
 
-    std::vector<uint8_t> requestMsg(sizeof(pldm_msg_hdr) +
-                                    PLDM_GET_SENSOR_READING_REQ_BYTES);
+    std::vector<uint8_t> requestMsg(sizeof(pldm_msg_hdr) + PLDM_GET_SENSOR_READING_REQ_BYTES);
+
+    std::vector<uint8_t> responseMsg;
 
     auto request = reinterpret_cast<pldm_msg*>(requestMsg.data());
     auto rc =
@@ -220,60 +230,82 @@ void PldmSensor::read(void)
     /** @brief MCTP EID of host firmware */
     constexpr uint8_t PLDM_ENTITY_ID = 8;
     const uint8_t MCTP_MSG_TYPE_PLDM = 1;
-    std::vector<uint8_t> responseMsg;
     // Insert the PLDM message type and EID at the beginning of the
     // msg.
-    requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
-    requestMsg.insert(requestMsg.begin(), mctp_eid);
+    //requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
+    //requestMsg.insert(requestMsg.begin(), mctp_eid);
 
-    if (mctp_eid != PLDM_ENTITY_ID)
-    {
-        int fd = pldm_open();
-        if (-1 == fd)
-        {
-            std::cerr << "failed to init mctp "
-                      << "\n";
-            // return -1;
-        }
-        uint8_t* responseMessage = nullptr;
-        size_t responseMessageSize{};
-    printf("trace-1 \n");
-    std::cout.flush();
-        pldm_send_recv(mctp_eid, fd, requestMsg.data() + 2,
-                       requestMsg.size() - 2, &responseMessage,
-                       &responseMessageSize);
-    printf("trace-2 \n");
-    std::cout.flush();
-        responseMsg.resize(responseMessageSize);
-        memcpy(responseMsg.data(), responseMessage, responseMsg.size());
+    printf("REquest Payload:\n");
+             for (int i = 0; i < requestMsg.size(); ++i) {
+                     printf("0x%02x ", requestMsg[i]);
+                     }
 
-        free(responseMessage);
-    }
-    else
+
+    //int valread;
+  /*  char buffer[1024];
+    const char devPath1[] = "\0dharshan-mux";
+    int sockFd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    if (-1 == sockFd)
     {
-        mctpSockSendRecv(requestMsg, responseMsg, mctpVerbose);
-        Logger(pldmVerbose, "Response Message:", "");
-        printBuffer(responseMsg, pldmVerbose);
-        responseMsg.erase(responseMsg.begin(),
-                          responseMsg.begin() + 2 /* skip the mctp header */);
+        perror("socket failed");
+        return -1;
     }
 
-    auto responsePtr = reinterpret_cast<struct pldm_msg*>(responseMsg.data());
-    printf("Read-2 \n");
+    struct sockaddr_un addr
+    {};
+    addr.sun_family = AF_UNIX;
+
+    memcpy(addr.sun_path, devPath1, sizeof(devPath1) - 1);
+
+    int result = connect(sockFd, reinterpret_cast<struct sockaddr*>(&addr),
+                         sizeof(devPath1) + sizeof(addr.sun_family) - 1);
+    if (-1 == result)
+    {
+        perror("Connect failed");
+        return -1;
+    }
+
+    send(sockFd , requestMsg.data(), requestMsg.size() , 0 );
+    
+    ssize_t peekedLength = recv(sockFd, nullptr, 0, MSG_TRUNC | MSG_PEEK);
+    printf("peekedLength : %d\n", peekedLength);
+
+    responseMsg.resize(peekedLength);
+
+
+
+    auto recvDataLength =
+                recv(sockFd, reinterpret_cast<void*>(responseMsg.data()),
+                     peekedLength, 0);
+
+    printf("recvDataLength : %d\n", recvDataLength);
+
+             printf("Response Payload:\n");
+             for (ssize_t i = 0; i < peekedLength; ++i) {
+                     printf("0x%02x ", responseMsg[i]);
+                     }
+             printf("\n");
+    
+    close(sockFd);
+*/
+    ssize_t peekedLength = 17;
+    responseMsg.resize(peekedLength);
     std::cout.flush();
-    constexpr auto hdrSize = sizeof(pldm_msg_hdr);
+  /* constexpr auto hdrSize = sizeof(pldm_msg_hdr);
     std::array<uint8_t, hdrSize + PLDM_GET_SENSOR_READING_MIN_RESP_BYTES + 3>
         responseMsg1{};
 
+    auto responsePtr = reinterpret_cast<struct pldm_msg*>(responseMsg.data());
+
     uint8_t completionCode = 0;
-    uint8_t retcompletionCode;
+    uint8_t retcompletionCode = 0;
     uint8_t retsensor_dataSize = PLDM_SENSOR_DATA_SIZE_UINT32;
-    uint8_t retsensor_operationalState;
-    uint8_t retsensor_event_messageEnable;
-    uint8_t retpresentState;
-    uint8_t retpreviousState;
-    uint8_t reteventState;
-    uint8_t retpresentReading[4];
+    uint8_t retsensor_operationalState = 0;
+    uint8_t retsensor_event_messageEnable = 0;
+    uint8_t retpresentState = 0;
+    uint8_t retpreviousState = 0;
+    uint8_t reteventState = 0;
+    uint8_t retpresentReading[4] = {0};
 
     auto rcDec = decode_get_sensor_reading_resp(
         responsePtr, responseMsg1.size() - hdrSize, &retcompletionCode,
@@ -285,12 +317,11 @@ void PldmSensor::read(void)
     {
         std::cerr << "Response Message Error: "
                   << "rc=" << rc << ",cc=" << (int)completionCode << "\n";
-        return;
+        return -1;
     }
 
-    updateValue(retpresentReading[0]);
-    printf("Read-3 \n");
-    std::cout.flush();
+    updateValue(retpresentReading[0]); */
+    return 0;
 }
 
 void createSensors(
@@ -447,7 +478,7 @@ int main()
 
     std::function<void(sdbusplus::message::message&)> eventHandler =
         [&](sdbusplus::message::message&) {
-            configTimer.expires_from_now(boost::posix_time::seconds(1));
+            configTimer.expires_from_now(boost::posix_time::seconds(10));
             // create a timer because normally multiple properties change
             configTimer.async_wait([&](const boost::system::error_code& ec) {
                 if (ec == boost::asio::error::operation_aborted)
@@ -474,7 +505,7 @@ int main()
         "type='signal',interface='" + std::string(properties::interface) +
             "',path='" + std::string(power::path) + "',arg0='" +
             std::string(power::interface) + "'",
-        reinitSensors);
+        reinitSensors); 
 
     io.run();
 }

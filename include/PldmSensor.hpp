@@ -86,7 +86,7 @@ struct PldmSensor : public Sensor
     ~PldmSensor();
 
     void checkThresholds(void) override;
-    void read(void);
+    int read1(void);
     void init(void);
     void loadDefaults(void);
     void runInitCmd(void);
