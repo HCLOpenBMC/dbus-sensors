@@ -44,20 +44,26 @@ static constexpr bool DEBUG = false;
 
 namespace fs = std::filesystem;
 
+// The following two structures need to be consistent
 static constexpr std::array<const char*, 3> sensorTypes = {
     "xyz.openbmc_project.Configuration.AspeedFan",
     "xyz.openbmc_project.Configuration.I2CFan",
     "xyz.openbmc_project.Configuration.NuvotonFan"};
+
+enum FanTypes
+{
+    aspeed = 0,
+    i2c,
+    nuvoton,
+    max,
+};
+
+static_assert(std::tuple_size<decltype(sensorTypes)>::value == FanTypes::max,
+              "sensorTypes element number is not equal to FanTypes number");
+
 constexpr const char* redundancyConfiguration =
     "xyz.openbmc_project.Configuration.FanRedundancy";
 static std::regex inputRegex(R"(fan(\d+)_input)");
-
-enum class FanTypes
-{
-    aspeed,
-    i2c,
-    nuvoton
-};
 
 // todo: power supply fan redundancy
 std::optional<RedundancySensor> systemRedundancy;
@@ -141,7 +147,6 @@ void createSensors(
         sensorsChanged,
     size_t retries = 0)
 {
-
     auto getter = std::make_shared<GetSensorConfiguration>(
         dbusConnection,
         std::move([&io, &objectServer, &tachSensors, &pwmSensors,
@@ -152,13 +157,9 @@ void createSensors(
             if (!findFiles(fs::path("/sys/class/hwmon"), R"(fan\d+_input)",
                            paths))
             {
-                std::cerr << "No temperature sensors in system\n";
+                std::cerr << "No fan sensors in system\n";
                 return;
             }
-
-            // pwm index, sysfs path, pwm name
-            std::vector<std::tuple<uint8_t, std::string, std::string>>
-                pwmNumbers;
 
             // iterate through all found fan sensors, and try to match them with
             // configuration
@@ -170,8 +171,10 @@ void createSensors(
                 std::regex_search(pathStr, match, inputRegex);
                 std::string indexStr = *(match.begin() + 1);
 
-                auto directory = path.parent_path();
+                fs::path directory = path.parent_path();
+                fs::path pwmPath = directory / ("pwm" + indexStr);
                 FanTypes fanType = getFanType(directory);
+
                 size_t bus = 0;
                 size_t address = 0;
                 if (fanType == FanTypes::i2c)
@@ -200,21 +203,16 @@ void createSensors(
                 {
                     // find the base of the configuration to see if indexes
                     // match
-                    for (const char* type : sensorTypes)
-                    {
-                        auto sensorBaseFind = sensor.second.find(type);
-                        if (sensorBaseFind != sensor.second.end())
-                        {
-                            baseConfiguration = &(*sensorBaseFind);
-                            interfacePath = &(sensor.first.str);
-                            baseType = type;
-                            break;
-                        }
-                    }
-                    if (baseConfiguration == nullptr)
+                    auto sensorBaseFind =
+                        sensor.second.find(sensorTypes[fanType]);
+                    if (sensorBaseFind == sensor.second.end())
                     {
                         continue;
                     }
+
+                    baseConfiguration = &(*sensorBaseFind);
+                    interfacePath = &(sensor.first.str);
+                    baseType = sensorTypes[fanType];
 
                     auto findIndex = baseConfiguration->second.find("Index");
                     if (findIndex == baseConfiguration->second.end())
@@ -237,9 +235,7 @@ void createSensors(
                         sensorData = &(sensor.second);
                         break;
                     }
-                    else if (baseType ==
-                             std::string(
-                                 "xyz.openbmc_project.Configuration.I2CFan"))
+                    else if (fanType == FanTypes::i2c)
                     {
                         auto findBus = baseConfiguration->second.find("Bus");
                         auto findAddress =
@@ -370,6 +366,7 @@ void createSensors(
                     sensorData->find(baseType + std::string(".Connector"));
 
                 std::optional<std::string> led;
+                std::string pwmName;
 
                 if (connector != sensorData->end())
                 {
@@ -382,7 +379,6 @@ void createSensors(
                         /* use pwm name override if found in configuration else
                          * use default */
                         auto findOverride = connector->second.find("PwmName");
-                        std::string pwmName;
                         if (findOverride != connector->second.end())
                         {
                             pwmName = std::visit(VariantToStringVisitor(),
@@ -392,7 +388,6 @@ void createSensors(
                         {
                             pwmName = "Pwm_" + std::to_string(pwm + 1);
                         }
-                        pwmNumbers.emplace_back(pwm, *interfacePath, pwmName);
                     }
                     else
                     {
@@ -423,47 +418,16 @@ void createSensors(
                     std::move(presenceSensor), redundancy, io, sensorName,
                     std::move(sensorThresholds), *interfacePath, limits,
                     powerState, led);
+
+                if (fs::exists(pwmPath) && !pwmSensors.count(pwmPath))
+                {
+                    pwmSensors[pwmPath] = std::make_unique<PwmSensor>(
+                        pwmName, pwmPath, dbusConnection, objectServer,
+                        *interfacePath, "Fan");
+                }
             }
+
             createRedundancySensor(tachSensors, dbusConnection, objectServer);
-            std::vector<fs::path> pwms;
-            if (!findFiles(fs::path("/sys/class/hwmon"), R"(pwm\d+$)", pwms))
-            {
-                std::cerr << "No pwm in system\n";
-                return;
-            }
-            for (const fs::path& pwm : pwms)
-            {
-                if (pwmSensors.find(pwm) != pwmSensors.end())
-                {
-                    continue;
-                }
-                const std::string* path = nullptr;
-                const std::string* pwmName = nullptr;
-
-                for (const auto& [index, configPath, name] : pwmNumbers)
-                {
-                    if (pwm.filename().string() ==
-                        "pwm" + std::to_string(index + 1))
-                    {
-                        path = &configPath;
-                        pwmName = &name;
-                        break;
-                    }
-                }
-
-                if (path == nullptr)
-                {
-                    continue;
-                }
-
-                // only add new elements
-                const std::string& sysPath = pwm.string();
-                pwmSensors.insert(
-                    std::pair<std::string, std::unique_ptr<PwmSensor>>(
-                        sysPath, std::make_unique<PwmSensor>(
-                                     *pwmName, sysPath, dbusConnection,
-                                     objectServer, *path, "Fan")));
-            }
         }));
     getter->getConfiguration(
         std::vector<std::string>{sensorTypes.begin(), sensorTypes.end()},
