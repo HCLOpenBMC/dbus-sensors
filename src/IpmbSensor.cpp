@@ -165,7 +165,8 @@ void findObjects(std::shared_ptr<sdbusplus::asio::connection>& dbusConnection)
     auto reply = dbusConnection->call(method);
     reply.read(paths);
 
-    for (int iPath = 0; iPath < paths.size(); iPath++)
+    int pathSize = paths.size();
+    for (int iPath = 0; iPath < pathSize; iPath++)
     {
         objPath = paths.at(iPath).c_str();
         auto method = dbusConnection->new_method_call(
@@ -289,7 +290,8 @@ void sdr::ipmbGetSdr(
         std::vector<uint8_t> data;
         data = std::get<5>(resp);
 
-        for (int iData = 0; iData < data.size(); iData++)
+        int dataSize = data.size();
+        for (int iData = 0; iData < dataSize; iData++)
         {
             getSdrData.push_back(data.at(iData));
         }
@@ -399,11 +401,11 @@ double sdr::dataConversion(double conValue, uint8_t recCount)
         dataCon -= thermalConst;
     }
 
+    int neg = sizeof(neg_reading_sensor_support_list) / sizeof(uint8_t);
     if (dataCon > maxPosReadingMargin)
     {
         // Negative reading handle
-        for (int i = 0;
-             i < sizeof(neg_reading_sensor_support_list) / sizeof(uint8_t); i++)
+        for (int i = 0; i < neg; i++)
         {
             if (dev_addr == neg_reading_sensor_support_list[i])
             {
@@ -1016,7 +1018,8 @@ int main()
     io.post([&]() { createSensors(io, objectServer, sensors, systemBus); });
 
     findObjects(systemBus);
-    for (int iter = 0; iter < sdr::ipmbBus.size(); iter++)
+    int sdrSize = sdr::ipmbBus.size();
+    for (int iter = 0; iter < sdrSize; iter++)
     {
         sdr::validRecordCount = 0;
         sdr::cmdAddr = sdr::ipmbBus.at(iter) << 2;
