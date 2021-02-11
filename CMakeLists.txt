@@ -6,7 +6,6 @@ set (CMAKE_CXX_STANDARD_REQUIRED ON)
 set (
     CMAKE_CXX_FLAGS
     "${CMAKE_CXX_FLAGS} -lstdc++fs \
-    -Werror \
     -Wall \
     -Wextra \
     -Wnon-virtual-dtor \
@@ -14,7 +13,6 @@ set (
     -Wcast-align \
     -Wunused \
     -Woverloaded-virtual \
-    -Wpedantic \
     -Wmisleading-indentation \
     -Wduplicated-cond \
     -Wduplicated-branches \
@@ -79,7 +77,7 @@ set (PSU_SRC_FILES src/Utils.cpp src/PSUSensor.cpp src/Thresholds.cpp
 set (NVME_SRC_FILES src/Utils.cpp src/NVMeSensorMain.cpp src/NVMeSensor.cpp src/Thresholds.cpp)
 
 set (EXTERNAL_PACKAGES Boost sdbusplus-project nlohmann-json pldm)
-set (SENSOR_LINK_LIBS -lsystemd stdc++fs sdbusplus -lpldm)
+set (SENSOR_LINK_LIBS -lsystemd stdc++fs sdbusplus -lpldm -lncsi)
 
 set (PLDM_SRC_FILES src/Utils.cpp src/Thresholds.cpp)
 

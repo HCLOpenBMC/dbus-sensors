@@ -43,6 +43,15 @@
 #include <variant>
 #include <vector>
 
+//#include<libncsi/ncsi_util.hpp>
+
+
+//using namespace phosphor::network;
+//using namespace phosphor::network::ncsi;
+
+//extern int ncsi_data_len;
+//extern char *ncsi_data;
+
 constexpr const bool debug = false;
 
 constexpr const char* configInterface =
@@ -223,42 +232,26 @@ void PldmSensor::read(void)
     std::vector<uint8_t> responseMsg;
     // Insert the PLDM message type and EID at the beginning of the
     // msg.
-    requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
-    requestMsg.insert(requestMsg.begin(), mctp_eid);
+    //requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
+    //requestMsg.insert(requestMsg.begin(), mctp_eid);
 
-    if (mctp_eid != PLDM_ENTITY_ID)
+    /*int package = 0;
+    int channel = 0;
+    int ifindex = 2;
+    int opcode  = 81;
+    short payload_length = requestMsg.size();
+
+    sendCommand(ifindex, package, channel, opcode, payload_length, requestMsg.data());
+
+    printf("NCSI Response Payload length = %d\n", ncsi_data_len);
+    printf("Response Payload:\n");
+    for (int i = 0; i < ncsi_data_len; ++i) 
     {
-        int fd = pldm_open();
-        if (-1 == fd)
-        {
-            std::cerr << "failed to init mctp "
-                      << "\n";
-            // return -1;
-        }
-        uint8_t* responseMessage = nullptr;
-        size_t responseMessageSize{};
-    printf("trace-1 \n");
-    std::cout.flush();
-        pldm_send_recv(mctp_eid, fd, requestMsg.data() + 2,
-                       requestMsg.size() - 2, &responseMessage,
-                       &responseMessageSize);
-    printf("trace-2 \n");
-    std::cout.flush();
-        responseMsg.resize(responseMessageSize);
-        memcpy(responseMsg.data(), responseMessage, responseMsg.size());
-
-        free(responseMessage);
+        printf("0x%02x ", *(ncsi_data+i));
     }
-    else
-    {
-        mctpSockSendRecv(requestMsg, responseMsg, mctpVerbose);
-        Logger(pldmVerbose, "Response Message:", "");
-        printBuffer(responseMsg, pldmVerbose);
-        responseMsg.erase(responseMsg.begin(),
-                          responseMsg.begin() + 2 /* skip the mctp header */);
-    }
+    printf("\n");
 
-    auto responsePtr = reinterpret_cast<struct pldm_msg*>(responseMsg.data());
+    auto responsePtr = reinterpret_cast<struct pldm_msg*>(ncsi_data+20);
     printf("Read-2 \n");
     std::cout.flush();
     constexpr auto hdrSize = sizeof(pldm_msg_hdr);
@@ -266,14 +259,14 @@ void PldmSensor::read(void)
         responseMsg1{};
 
     uint8_t completionCode = 0;
-    uint8_t retcompletionCode;
+    uint8_t retcompletionCode = 0;
     uint8_t retsensor_dataSize = PLDM_SENSOR_DATA_SIZE_UINT32;
-    uint8_t retsensor_operationalState;
-    uint8_t retsensor_event_messageEnable;
-    uint8_t retpresentState;
-    uint8_t retpreviousState;
-    uint8_t reteventState;
-    uint8_t retpresentReading[4];
+    uint8_t retsensor_operationalState = 0;
+    uint8_t retsensor_event_messageEnable = 0;
+    uint8_t retpresentState = 0;
+    uint8_t retpreviousState = 0;
+    uint8_t reteventState = 0;
+    uint8_t retpresentReading[4] = {0};
 
     auto rcDec = decode_get_sensor_reading_resp(
         responsePtr, responseMsg1.size() - hdrSize, &retcompletionCode,
@@ -291,6 +284,7 @@ void PldmSensor::read(void)
     updateValue(retpresentReading[0]);
     printf("Read-3 \n");
     std::cout.flush();
+    */
 }
 
 void createSensors(
