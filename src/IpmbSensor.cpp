@@ -84,8 +84,6 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
 
         sensorInterface = objectServer.add_interface(
             dbusPath, "xyz.openbmc_project.Software.Version");
-        printf(" Dbus path : %s \n",dbusPath);
-        std::cout.flush();
     }
     else
     {
@@ -672,10 +670,11 @@ bool IpmbSensor::processReading(const std::vector<uint8_t>& data, double& resp)
                 }
                 return false;
             }
-            for (int i = 3; i < data.size(); i++)
+            int size = data.size();
+            for (int i = 3; i < size; i++)
             {
                 version = version + std::to_string(data[i]);
-                if ((i != (data.size() - 1)) && (i != 6))
+                if ((i != (size - 1)) && (i != 6))
                 {
                     version = version + ".";
                 }
@@ -898,16 +897,19 @@ void createSensors(
                             VariantToUnsignedIntVisitor(), findBusType->second);
                     }
 
-                    int pollTimeValue = pollTimeDefault;
-                    int val = pollTimeDefault;
+                    sensor->pollTimeValue = pollTimeDefault;
                     auto findPollTime = entry.second.find("PollTime");
                     if (findPollTime != entry.second.end())
                     {
                         sensor->pollTimeValue = std::visit(
                             VariantToIntVisitor(), findPollTime->second);
                     }
-                    printf(" Poll Time Value : %d \n",val);
-                    std::cout.flush();
+/*                    else
+                    {
+                        sensor->pollTimeValue = pollTimeDefault;
+                    }*/
+//                    printf(" Poll Time Value : %d \n",pollTimeValue);
+//                    std::cout.flush();
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;
