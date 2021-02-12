@@ -43,14 +43,14 @@
 #include <variant>
 #include <vector>
 
-//#include<libncsi/ncsi_util.hpp>
+#include<libncsi/ncsi_util.hpp>
 
 
-//using namespace phosphor::network;
-//using namespace phosphor::network::ncsi;
+using namespace phosphor::network;
+using namespace phosphor::network::ncsi;
 
-//extern int ncsi_data_len;
-//extern char *ncsi_data;
+extern int ncsi_data_len;
+extern char *ncsi_data;
 
 constexpr const bool debug = false;
 
@@ -214,7 +214,7 @@ void PldmSensor::read(void)
     printf("inside Read-1 \n");
     std::cout.flush();
     uint16_t sensorId = 0x0001;
-    bool8_t rearmEventState = 0x01;
+    bool8_t rearmEventState = 0x00;
 
     std::vector<uint8_t> requestMsg(sizeof(pldm_msg_hdr) +
                                     PLDM_GET_SENSOR_READING_REQ_BYTES);
@@ -235,11 +235,19 @@ void PldmSensor::read(void)
     //requestMsg.insert(requestMsg.begin(), MCTP_MSG_TYPE_PLDM);
     //requestMsg.insert(requestMsg.begin(), mctp_eid);
 
-    /*int package = 0;
+    int package = 0;
     int channel = 0;
     int ifindex = 2;
     int opcode  = 81;
-    short payload_length = requestMsg.size();
+    short payload_length = requestMsg.size()-1;
+
+    printf("Request Payload:\n");
+    for (int i = 0; i < payload_length; ++i) 
+    {
+        printf("0x%02x ", requestMsg[i]);
+    }
+    printf("\n");
+
 
     sendCommand(ifindex, package, channel, opcode, payload_length, requestMsg.data());
 
@@ -250,8 +258,12 @@ void PldmSensor::read(void)
         printf("0x%02x ", *(ncsi_data+i));
     }
     printf("\n");
-
-    auto responsePtr = reinterpret_cast<struct pldm_msg*>(ncsi_data+20);
+    
+    double value = *(ncsi_data+30);
+    
+    std::cerr<<"The final value....: " << value << "\n";
+    updateValueProperty(value);
+    /*auto responsePtr = reinterpret_cast<struct pldm_msg*>(ncsi_data+20);
     printf("Read-2 \n");
     std::cout.flush();
     constexpr auto hdrSize = sizeof(pldm_msg_hdr);
@@ -274,17 +286,16 @@ void PldmSensor::read(void)
         &retsensor_event_messageEnable, &retpresentState, &retpreviousState,
         &reteventState, retpresentReading);
 
-    if (rcDec != PLDM_SUCCESS || completionCode != PLDM_SUCCESS)
-    {
-        std::cerr << "Response Message Error: "
-                  << "rc=" << rc << ",cc=" << (int)completionCode << "\n";
-        return;
-    }
+    std::cerr << "retcompletionCode: " << retcompletionCode <<"\n" << "retsensor_dataSize: " << retsensor_dataSize
+    <<"\n" << " retsensor_operationalState: " << retsensor_operationalState << "\n" << "retpresentState: " <<
+    retpresentState << "\n" << "retpresentReading :" << retpresentReading << "\n" ;
 
-    updateValue(retpresentReading[0]);
+    //updateValue(retpresentReading[0]);
+    updateValueProperty(retpresentReading[0]); */
+
     printf("Read-3 \n");
     std::cout.flush();
-    */
+    
 }
 
 void createSensors(

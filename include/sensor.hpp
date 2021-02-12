@@ -383,12 +383,12 @@ struct Sensor
             return;
         }
 
-        if (!readingStateGood())
+        /*if (!readingStateGood())
         {
             markAvailable(false);
             updateValueProperty(std::numeric_limits<double>::quiet_NaN());
             return;
-        }
+        }*/
 
         updateValueProperty(newValue);
         updateInstrumentation(newValue);
@@ -436,7 +436,6 @@ struct Sensor
         return false;
     }
 
-  private:
     void updateValueProperty(const double& newValue)
     {
         // Indicate that it is internal set call, not an external overwrite
