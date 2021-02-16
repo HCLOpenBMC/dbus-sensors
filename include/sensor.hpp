@@ -25,6 +25,8 @@ constexpr const size_t errorThreshold = 5;
 
 extern std::string nicFaultHandle;
 
+extern std::string fanFaultHandle;
+
 struct SensorInstrumentation
 {
     // These are for instrumentation for debugging

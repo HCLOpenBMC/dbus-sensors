@@ -22,6 +22,9 @@
 std::string nicFaultHandle;
 bool slotThermalDown = false;
 
+using sdbusplus::exception::SdBusError;
+std::string fanFaultHandle;
+
 static constexpr bool DEBUG = false;
 namespace thresholds
 {
@@ -60,6 +63,29 @@ std::string toBusValue(const Direction& direction)
         {
             return "err";
         }
+    }
+}
+
+static constexpr auto systemdBusname = "org.freedesktop.systemd1";
+static constexpr auto systemdPath = "/org/freedesktop/systemd1";
+static constexpr auto systemdInterface = "org.freedesktop.systemd1.Manager";
+
+void powerOffOn(std::string ServiceFile)
+{
+    boost::asio::io_service io;
+    auto bus = std::make_shared<sdbusplus::asio::connection>(io);
+
+    auto method = bus->new_method_call(systemdBusname, systemdPath,
+                                       systemdInterface, "StartUnit");
+    method.append(ServiceFile, "replace");
+    try
+    {
+        bus->call_noreply(method);
+    }
+    catch (const SdBusError& e)
+    {
+        std::cerr << "failed to update power off service : " << e.what()
+                  << "\n";
     }
 }
 
@@ -323,6 +349,11 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
                               << threshold.value << " assert: value "
                               << sensor->value << " raw data "
                               << sensor->rawValue << "\n";
+
+                    if (fanFaultHandle == "Yes")
+                    {
+                        powerOffOn("powerOffSlot.service");
+                    }
                 }
             }
             else if (value > (threshold.value + sensor->hysteresisTrigger))
