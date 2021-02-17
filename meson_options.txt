@@ -10,4 +10,5 @@ option('mcu-temp', type: 'feature', value: 'enabled', description: 'Enable MCU s
 option('nvme', type: 'feature', value: 'disabled', description: 'Enable NVMe sensor.',)
 option('psu', type: 'feature', value: 'enabled', description: 'Enable PSU sensor.',)
 option('external', type: 'feature', value: 'enabled', description: 'Enable External sensor.',)
+option('pldmsensor', type: 'feature', value: 'enabled', description: 'Enable Pldm sensor.',)
 option('tests', type: 'feature', description: 'Build tests.',)

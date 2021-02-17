@@ -440,7 +440,6 @@ struct Sensor
         return false;
     }
 
-  private:
     void updateValueProperty(const double& newValue)
     {
         // Indicate that it is internal set call, not an external overwrite

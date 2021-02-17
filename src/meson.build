@@ -192,6 +192,25 @@ if get_option('psu').enabled()
     )
 endif
 
+if get_option('pldmsensor').enabled()
+    executable(
+        'pldmsensor',
+        'PldmSensor.cpp',
+        dependencies: [
+            sdbusplus,
+            dependency('libpldm'),
+            dependency('libncsi'),
+        ],
+        implicit_include_directories: false,
+        include_directories: '../include',
+        install: true,
+        link_with: [
+            thresholds_a,
+            utils_a,
+        ],
+    )
+endif
+
 if get_option('external').enabled()
     executable(
         'externalsensor',
