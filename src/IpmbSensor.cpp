@@ -105,7 +105,6 @@ IpmbSensor::~IpmbSensor()
 void IpmbSensor::init(void)
 {
     loadDefaults();
-    setInitialProperties(dbusConnection);
 
     if ((readingFormat == ReadingFormat::sdrThres) ||
         (readingFormat == ReadingFormat::sdrDiscEvt))
@@ -116,9 +115,11 @@ void IpmbSensor::init(void)
                 "Unit", std::string(""),
                 sdbusplus::asio::PropertyPermission::readWrite);
         }
+        setInitialProperties(dbusConnection);
         sdrRead();
         return;
     }
+    setInitialProperties(dbusConnection);
 
     if (initCommand)
     {
