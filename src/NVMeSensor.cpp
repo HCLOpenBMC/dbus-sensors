@@ -14,13 +14,11 @@
 // limitations under the License.
 */
 
-#include "NVMeSensor.hpp"
-
-#include "NVMeDevice.hpp"
-
 #include <crc32c.h>
 #include <libmctp-smbus.h>
 
+#include <NVMeDevice.hpp>
+#include <NVMeSensor.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
@@ -29,7 +27,7 @@
 static constexpr double maxReading = 127;
 static constexpr double minReading = 0;
 
-static constexpr bool DEBUG = false;
+static constexpr bool debug = false;
 
 void rxMessage(uint8_t eid, void* data, void* msg, size_t len);
 
@@ -241,7 +239,7 @@ void readAndProcessNVMeSensor(const std::shared_ptr<NVMeContext>& nvmeDevice)
 
     readResponse(nvmeDevice);
 
-    if (DEBUG)
+    if (debug)
     {
         std::cout << "Sending message to read data from Drive on bus: "
                   << sensor->bus << " , rootBus: " << nvmeDevice->rootBus
@@ -265,7 +263,7 @@ static double getTemperatureReading(int8_t reading)
     {
         // 0x80 = No temperature data or temperature data is more the 5 s
         // old 0x81 = Temperature sensor failure
-        return maxReading;
+        return std::numeric_limits<double>::quiet_NaN();
     }
 
     return reading;
@@ -300,7 +298,7 @@ void rxMessage(uint8_t eid, void*, void* msg, size_t len)
         return;
     }
 
-    if (DEBUG)
+    if (debug)
     {
         std::cout << "Eid from the received messaged: " << eid << "\n";
     }
@@ -358,16 +356,25 @@ void rxMessage(uint8_t eid, void*, void* msg, size_t len)
     }
 
     std::shared_ptr<NVMeSensor> sensorInfo = self->sensors.front();
-    if (DEBUG)
+    if (debug)
     {
         std::cout << "Temperature Reading: "
                   << getTemperatureReading(messageData[5])
                   << " Celsius for device " << sensorInfo->name << "\n";
     }
 
-    sensorInfo->updateValue(getTemperatureReading(messageData[5]));
+    double value = getTemperatureReading(messageData[5]);
+    if (!std::isfinite(value))
+    {
+        sensorInfo->markAvailable(false);
+        sensorInfo->incrementError();
+    }
+    else
+    {
+        sensorInfo->updateValue(value);
+    }
 
-    if (DEBUG)
+    if (debug)
     {
         std::cout << "Cancelling the timer now\n";
     }
@@ -426,11 +433,11 @@ NVMeSensor::NVMeSensor(sdbusplus::asio::object_server& objectServer,
                        boost::asio::io_service&,
                        std::shared_ptr<sdbusplus::asio::connection>& conn,
                        const std::string& sensorName,
-                       std::vector<thresholds::Threshold>&& _thresholds,
+                       std::vector<thresholds::Threshold>&& thresholdsIn,
                        const std::string& sensorConfiguration,
                        const int busNumber) :
     Sensor(boost::replace_all_copy(sensorName, " ", "_"),
-           std::move(_thresholds), sensorConfiguration,
+           std::move(thresholdsIn), sensorConfiguration,
            "xyz.openbmc_project.Configuration.NVMe", maxReading, minReading,
            conn, PowerState::on),
     objServer(objectServer), bus(busNumber)

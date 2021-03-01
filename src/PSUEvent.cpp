@@ -14,10 +14,10 @@
 // limitations under the License.
 */
 
-#include "PSUEvent.hpp"
-
 #include <systemd/sd-journal.h>
 
+#include <PSUEvent.hpp>
+#include <SensorPaths.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/container/flat_map.hpp>
@@ -45,8 +45,9 @@ PSUCombineEvent::PSUCombineEvent(
     const std::string& combineEventName) :
     objServer(objectServer)
 {
+    std::string psuNameEscaped = sensor_paths::escapePathForDbus(psuName);
     eventInterface = objServer.add_interface(
-        "/xyz/openbmc_project/State/Decorator/" + psuName + "_" +
+        "/xyz/openbmc_project/State/Decorator/" + psuNameEscaped + "_" +
             combineEventName,
         "xyz.openbmc_project.State.Decorator.OperationalStatus");
     eventInterface->register_property("functional", true);
@@ -145,10 +146,10 @@ PSUSubEvent::PSUSubEvent(
     std::shared_ptr<std::set<std::string>> combineEvent,
     std::shared_ptr<bool> state, const std::string& psuName) :
     std::enable_shared_from_this<PSUSubEvent>(),
-    eventInterface(eventInterface), asserts(asserts),
-    combineEvent(combineEvent), assertState(state), errCount(0), path(path),
-    eventName(eventName), waitTimer(io), inputDev(io), psuName(psuName),
-    groupEventName(groupEventName), systemBus(conn)
+    eventInterface(std::move(eventInterface)), asserts(std::move(asserts)),
+    combineEvent(std::move(combineEvent)), assertState(std::move(state)),
+    errCount(0), path(path), eventName(eventName), waitTimer(io), inputDev(io),
+    psuName(psuName), groupEventName(groupEventName), systemBus(conn)
 {
     fd = open(path.c_str(), O_RDONLY);
     if (fd < 0)
@@ -174,7 +175,7 @@ PSUSubEvent::PSUSubEvent(
     if (fanPos != std::string::npos)
     {
         fanName = path.substr(fanPos);
-        auto fanNamePos = fanName.find("_");
+        auto fanNamePos = fanName.find('_');
         if (fanNamePos != std::string::npos)
         {
             fanName = fanName.substr(0, fanNamePos);

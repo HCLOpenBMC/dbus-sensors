@@ -14,14 +14,9 @@
 // limitations under the License.
 */
 
-#include "IpmbSensor.hpp"
-
-#include "Utils.hpp"
-#include "VariantVisitors.hpp"
-
-#include <math.h>
-
-#include <boost/algorithm/string.hpp>
+#include <IpmbSensor.hpp>
+#include <Utils.hpp>
+#include <VariantVisitors.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/container/flat_map.hpp>
@@ -30,6 +25,7 @@
 #include <sdbusplus/bus/match.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -49,6 +45,7 @@ static constexpr double ipmbMinReading = 0;
 
 static constexpr uint8_t meAddress = 1;
 static constexpr uint8_t lun = 0;
+static constexpr uint8_t hostSMbusIndexDefault = 0x03;
 
 static constexpr const char* sensorPathPrefix = "/xyz/openbmc_project/sensors/";
 
@@ -65,12 +62,14 @@ IpmbSensor::IpmbSensor(std::shared_ptr<sdbusplus::asio::connection>& conn,
                        const std::string& sensorConfiguration,
                        sdbusplus::asio::object_server& objectServer,
                        std::vector<thresholds::Threshold>&& thresholdData,
-                       uint8_t deviceAddress, std::string& sensorTypeName) :
+                       uint8_t deviceAddress, uint8_t hostSMbusIndex,
+                       std::string& sensorTypeName) :
     Sensor(boost::replace_all_copy(sensorName, " ", "_"),
            std::move(thresholdData), sensorConfiguration,
            "xyz.openbmc_project.Configuration.ExitAirTemp", ipmbMaxReading,
            ipmbMinReading, conn, PowerState::on),
-    deviceAddress(deviceAddress), objectServer(objectServer), waitTimer(io)
+    deviceAddress(deviceAddress), hostSMbusIndex(hostSMbusIndex),
+    objectServer(objectServer), waitTimer(io)
 {
     std::string dbusPath = sensorPathPrefix + sensorTypeName + "/" + name;
 
@@ -149,11 +148,13 @@ void IpmbSensor::loadDefaults()
         command = ipmi::me_bridge::sendRawPmbus;
         initCommand = ipmi::me_bridge::sendRawPmbus;
         // pmbus read temp
-        commandData = {0x57, 0x01, 0x00, 0x16, 0x3,  deviceAddress, 0x00,
-                       0x00, 0x00, 0x00, 0x01, 0x02, 0x8d};
+        commandData = {0x57,          0x01, 0x00, 0x16, hostSMbusIndex,
+                       deviceAddress, 0x00, 0x00, 0x00, 0x00,
+                       0x01,          0x02, 0x8d};
         // goto page 0
-        initData = {0x57, 0x01, 0x00, 0x14, 0x03, deviceAddress, 0x00,
-                    0x00, 0x00, 0x00, 0x02, 0x00, 0x00,          0x00};
+        initData = {0x57,          0x01, 0x00, 0x14, hostSMbusIndex,
+                    deviceAddress, 0x00, 0x00, 0x00, 0x00,
+                    0x02,          0x00, 0x00, 0x00};
         readingFormat = ReadingFormat::elevenBit;
     }
     else if (type == IpmbType::IR38363VR)
@@ -162,8 +163,9 @@ void IpmbSensor::loadDefaults()
         netfn = ipmi::me_bridge::netFn;
         command = ipmi::me_bridge::sendRawPmbus;
         // pmbus read temp
-        commandData = {0x57, 0x01, 0x00, 0x16, 0x03, deviceAddress, 00,
-                       0x00, 0x00, 0x00, 0x01, 0x02, 0x8D};
+        commandData = {0x57,          0x01, 0x00, 0x16, hostSMbusIndex,
+                       deviceAddress, 00,   0x00, 0x00, 0x00,
+                       0x01,          0x02, 0x8D};
         readingFormat = ReadingFormat::elevenBitShift;
     }
     else if (type == IpmbType::ADM1278HSC)
@@ -175,9 +177,13 @@ void IpmbSensor::loadDefaults()
             case IpmbSubType::curr:
                 uint8_t snsNum;
                 if (subType == IpmbSubType::temp)
+                {
                     snsNum = 0x8d;
+                }
                 else
+                {
                     snsNum = 0x8c;
+                }
                 netfn = ipmi::me_bridge::netFn;
                 command = ipmi::me_bridge::sendRawPmbus;
                 commandData = {0x57, 0x01, 0x00, 0x86, deviceAddress,
@@ -202,11 +208,13 @@ void IpmbSensor::loadDefaults()
         command = ipmi::me_bridge::sendRawPmbus;
         initCommand = ipmi::me_bridge::sendRawPmbus;
         // pmbus read temp
-        commandData = {0x57, 0x01, 0x00, 0x16, 0x3,  deviceAddress, 0x00,
-                       0x00, 0x00, 0x00, 0x01, 0x02, 0x8d};
+        commandData = {0x57,          0x01, 0x00, 0x16, hostSMbusIndex,
+                       deviceAddress, 0x00, 0x00, 0x00, 0x00,
+                       0x01,          0x02, 0x8d};
         // goto page 0
-        initData = {0x57, 0x01, 0x00, 0x14, 0x03, deviceAddress, 0x00,
-                    0x00, 0x00, 0x00, 0x02, 0x00, 0x00,          0x00};
+        initData = {0x57,          0x01, 0x00, 0x14, hostSMbusIndex,
+                    deviceAddress, 0x00, 0x00, 0x00, 0x00,
+                    0x02,          0x00, 0x00, 0x00};
         readingFormat = ReadingFormat::byte3;
     }
     else
@@ -346,18 +354,16 @@ void IpmbSensor::read(void)
                     read();
                     return;
                 }
-                else
+
+                // rawValue only used in debug logging
+                // up to 5th byte in data are used to derive value
+                size_t end = std::min(sizeof(uint64_t), data.size());
+                uint64_t rawData = 0;
+                for (size_t i = 0; i < end; i++)
                 {
-                    // rawValue only used in debug logging
-                    // up to 5th byte in data are used to derive value
-                    size_t end = std::min(sizeof(uint64_t), data.size());
-                    uint64_t rawData = 0;
-                    for (size_t i = 0; i < end; i++)
-                    {
-                        reinterpret_cast<uint8_t*>(&rawData)[i] = data[i];
-                    }
-                    rawValue = static_cast<double>(rawData);
+                    reinterpret_cast<uint8_t*>(&rawData)[i] = data[i];
                 }
+                rawValue = static_cast<double>(rawData);
 
                 /* Adjust value as per scale and offset */
                 value = (value * scaleVal) + offsetVal;
@@ -410,6 +416,13 @@ void createSensors(
 
                     std::string sensorClass =
                         loadVariant<std::string>(entry.second, "Class");
+                    uint8_t hostSMbusIndex = hostSMbusIndexDefault;
+                    auto findSmType = entry.second.find("HostSMbusIndex");
+                    if (findSmType != entry.second.end())
+                    {
+                        hostSMbusIndex = std::visit(
+                            VariantToUnsignedIntVisitor(), findSmType->second);
+                    }
 
                     /* Default sensor type is "temperature" */
                     std::string sensorTypeName = "temperature";
@@ -424,7 +437,7 @@ void createSensors(
                     sensor = std::make_unique<IpmbSensor>(
                         dbusConnection, io, name, pathPair.first, objectServer,
                         std::move(sensorThresholds), deviceAddress,
-                        sensorTypeName);
+                        hostSMbusIndex, sensorTypeName);
 
                     /* Initialize scale and offset value */
                     sensor->scaleVal = 1;

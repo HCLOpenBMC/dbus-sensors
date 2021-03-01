@@ -1,10 +1,9 @@
 #pragma once
 
-#include "Thresholds.hpp"
-#include "sensor.hpp"
-
+#include <Thresholds.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <sdbusplus/asio/object_server.hpp>
+#include <sensor.hpp>
 
 #include <string>
 #include <vector>
@@ -19,9 +18,10 @@ class HwmonTempSensor :
                     std::shared_ptr<sdbusplus::asio::connection>& conn,
                     boost::asio::io_service& io, const std::string& fanName,
                     std::vector<thresholds::Threshold>&& thresholds,
+                    const float pollRate,
                     const std::string& sensorConfiguration,
                     const PowerState powerState);
-    ~HwmonTempSensor();
+    ~HwmonTempSensor() override;
     void setupRead(void);
 
   private:
@@ -31,6 +31,7 @@ class HwmonTempSensor :
     boost::asio::streambuf readBuf;
     std::string path;
     size_t errCount;
+    unsigned int sensorPollMs;
 
     void handleResponse(const boost::system::error_code& err);
     void checkThresholds(void) override;
