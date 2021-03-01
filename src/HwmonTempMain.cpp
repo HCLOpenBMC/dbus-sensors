@@ -40,8 +40,10 @@
 static constexpr bool DEBUG = false;
 
 namespace fs = std::filesystem;
-static constexpr std::array<const char*, 11> sensorTypes = {
+static constexpr std::array<const char*, 13> sensorTypes = {
+    "xyz.openbmc_project.Configuration.EMC1412",
     "xyz.openbmc_project.Configuration.EMC1413",
+    "xyz.openbmc_project.Configuration.EMC1414",
     "xyz.openbmc_project.Configuration.MAX31725",
     "xyz.openbmc_project.Configuration.MAX31730",
     "xyz.openbmc_project.Configuration.MAX6581",
@@ -84,11 +86,17 @@ void createSensors(
             {
                 std::smatch match;
                 const std::string& pathStr = path.string();
+
+                std::cerr<<"Sys path = "<<pathStr<<std::endl;
+
                 auto directory = path.parent_path();
+                std::cerr<<"Directory = "<< directory.string() << std::endl;
 
                 auto ret = directories.insert(directory.string());
+                std::cerr<<"Directory ret = "<<ret.second <<std::endl;
                 if (!ret.second)
                 {
+                    std::cerr<<"Skip, Already searched this path "<<std::endl;
                     continue; // already searched this path
                 }
 
@@ -100,6 +108,10 @@ void createSensors(
                     std::cerr << "found bad device " << deviceName << "\n";
                     continue;
                 }
+
+                std::cerr<<"Device = "<<device <<std::endl;
+                std::cerr<<"Device name = "<<deviceName <<std::endl;
+                 
                 std::string busStr = deviceName.substr(0, findHyphen);
                 std::string addrStr = deviceName.substr(findHyphen + 1);
 
@@ -112,8 +124,13 @@ void createSensors(
                 }
                 catch (std::invalid_argument&)
                 {
+                    std::cerr<<"Skip, Invalid Argument "<<std::endl;
                     continue;
                 }
+ 
+                std::cerr<<"Bus = "<<bus<<std::endl;
+                std::cerr<<"Addr = "<<addr<<std::endl;
+
                 const SensorData* sensorData = nullptr;
                 const std::string* interfacePath = nullptr;
                 const char* sensorType = nullptr;
@@ -124,13 +141,19 @@ void createSensors(
                                      SensorData>& sensor : sensorConfigurations)
                 {
                     sensorData = &(sensor.second);
+                    std::cerr<<"sensor Data = " <<sensorData<<std::endl;
+
                     for (const char* type : sensorTypes)
                     {
+                        std::cerr<<"Type = "<< type <<std::endl;
                         auto sensorBase = sensorData->find(type);
                         if (sensorBase != sensorData->end())
                         {
                             baseConfiguration = &(*sensorBase);
+                            //std::cerr<<"Base Configuration = " <<*baseConfiguration<<std::endl;
                             sensorType = type;
+                            std::cerr<<"Sensor Type = "<< sensorType <<std::endl;
+                            std::cerr<<"Skip, break -sensor config "<<std::endl;
                             break;
                         }
                     }
@@ -151,15 +174,21 @@ void createSensors(
                                      "configuration\n";
                         continue;
                     }
+                    //std::cerr<<"Configuration Bus = " <<configurationBus<<std::endl;
+                    //std::cerr<<"Configuration Addr = " <<configurationAddress<<std::endl;
 
                     if (std::get<uint64_t>(configurationBus->second) != bus ||
                         std::get<uint64_t>(configurationAddress->second) !=
                             addr)
                     {
+                        std::cerr<<"Skip, buss/addr is not equal "<<std::endl;
                         continue;
                     }
 
                     interfacePath = &(sensor.first.str);
+                    std::cerr<<"Interfacepath1 = "<<sensor.first.str<<std::endl;
+                    std::cerr<<"Interfacepath2 = "<<*interfacePath<<std::endl;
+                    std::cerr<<"break, Interface path "<<std::endl;
                     break;
                 }
                 if (interfacePath == nullptr)
@@ -178,16 +207,22 @@ void createSensors(
                 }
                 std::string sensorName =
                     std::get<std::string>(findSensorName->second);
+          
+                std::cerr<<"Sensor Name = "<<sensorName<<std::endl;
+
                 // on rescans, only update sensors we were signaled by
                 auto findSensor = sensors.find(sensorName);
                 if (!firstScan && findSensor != sensors.end())
                 {
+                    std::cerr<<"sensor found "<<std::endl;
+
                     bool found = false;
                     for (auto it = sensorsChanged->begin();
                          it != sensorsChanged->end(); it++)
                     {
                         if (boost::ends_with(*it, findSensor->second->name))
                         {
+                            std::cerr<<"Find Sensor Name = "<<findSensor->second->name<<std::endl;
                             sensorsChanged->erase(it);
                             findSensor->second = nullptr;
                             found = true;
@@ -199,6 +234,19 @@ void createSensors(
                         continue;
                     }
                 }
+
+                // Handles the falut-handle in sensors .
+                auto findNicFault = baseConfigMap->find("Nicfault");
+                if (findNicFault == baseConfigMap->end())
+                {
+                    std::cerr << "could not find NIC Fault-Handle flag \n";
+                }
+                else
+                {
+                    nicFaultHandle =
+                        std::get<std::string>(findNicFault->second);
+                }
+
                 std::vector<thresholds::Threshold> sensorThresholds;
                 if (!parseThresholdsFromConfig(*sensorData, sensorThresholds))
                 {
@@ -213,6 +261,10 @@ void createSensors(
                         VariantToStringVisitor(), findPowerOn->second);
                     setReadState(powerState, readState);
                 }
+  
+                //std::cerr<<"objectServer = " <<objectServer<<std::endl;
+                //std::cerr<<"dbusConnection = " <<*dbusConnection<<std::endl;
+                std::cerr<<"Interface path= " <<*interfacePath<<std::endl;
 
                 auto permitSet = getPermitSet(*baseConfigMap);
                 auto& sensor = sensors[sensorName];
@@ -239,6 +291,7 @@ void createSensors(
                     {
                         break;
                     }
+
                     std::string sensorName =
                         std::get<std::string>(findKey->second);
                     hwmonFile = getFullHwmonFilePath(
@@ -246,6 +299,7 @@ void createSensors(
                         permitSet);
                     if (hwmonFile)
                     {
+                        std::cerr<<"Sensor Name1 = "<<sensorName<<std::endl;
                         auto& sensor = sensors[sensorName];
                         sensor = nullptr;
                         sensor = std::make_shared<HwmonTempSensor>(

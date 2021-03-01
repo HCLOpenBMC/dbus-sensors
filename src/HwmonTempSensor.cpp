@@ -52,9 +52,16 @@ HwmonTempSensor::HwmonTempSensor(
     std::enable_shared_from_this<HwmonTempSensor>(), objServer(objectServer),
     inputDev(io, open(path.c_str(), O_RDONLY)), waitTimer(io), path(path)
 {
-    sensorInterface = objectServer.add_interface(
+    
+ 
+   std::cerr<<"HwmonTempSensor path :" << path <<std::endl;
+   std::cerr<<"HwmonTempSensor ObjectType :" << objectType <<std::endl;
+
+   sensorInterface = objectServer.add_interface(
         "/xyz/openbmc_project/sensors/temperature/" + name,
         "xyz.openbmc_project.Sensor.Value");
+ 
+    std::cerr<<"Sensor Interface created :" << sensorInterface <<std::endl;
 
     if (thresholds::hasWarningInterface(thresholds))
     {
@@ -71,6 +78,9 @@ HwmonTempSensor::HwmonTempSensor(
     association = objectServer.add_interface(
         "/xyz/openbmc_project/sensors/temperature/" + name,
         association::interface);
+    
+    std::cerr<<"Association created :" << association <<std::endl;
+
     setInitialProperties(conn);
 }
 
@@ -88,6 +98,8 @@ HwmonTempSensor::~HwmonTempSensor()
 void HwmonTempSensor::setupRead(void)
 {
     std::weak_ptr<HwmonTempSensor> weakRef = weak_from_this();
+   
+//    std::cerr<<"Setup Read - inputDev  :" << inputDev <<std::endl;
 
     boost::asio::async_read_until(inputDev, readBuf, '\n',
                                   [weakRef](const boost::system::error_code& ec,
@@ -120,6 +132,8 @@ void HwmonTempSensor::handleResponse(const boost::system::error_code& err)
             rawValue = std::stod(response);
             double nvalue = rawValue / sensorScaleFactor;
             updateValue(nvalue);
+
+            //std::cerr<<"nValue  :" << nvalue <<std::endl;
         }
         catch (const std::invalid_argument&)
         {
@@ -133,6 +147,9 @@ void HwmonTempSensor::handleResponse(const boost::system::error_code& err)
 
     responseStream.clear();
     inputDev.close();
+
+    //std::cerr<<"Handle Resp  :" << path.c_str() <<std::endl;
+
     int fd = open(path.c_str(), O_RDONLY);
     if (fd < 0)
     {
