@@ -42,6 +42,10 @@ PwmSensor::PwmSensor(const std::string& name, const std::string& sysPath,
     sensorInterface = objectServer.add_interface(
         "/xyz/openbmc_project/sensors/fan_pwm/" + name,
         "xyz.openbmc_project.Sensor.Value");
+
+    std::cout << "Sensor Interface : " << sensorInterface << "\n";
+    std::cout.flush();
+
     uint32_t pwmValue = getValue(false);
     if (sensorType == "PSU")
     {
@@ -173,6 +177,9 @@ PwmSensor::~PwmSensor()
 
 void PwmSensor::setValue(uint32_t value)
 {
+    std::cout << " In pwm set value \n";
+    std::cout.flush();
+
     std::ofstream ref(sysPath);
     if (!ref.good())
     {
@@ -185,6 +192,11 @@ void PwmSensor::setValue(uint32_t value)
 // prints an error and returns 0
 uint32_t PwmSensor::getValue(bool errThrow)
 {
+    std::cout << " In pwm get value \n";
+    std::cout.flush();
+    std::cout << " sys path :" <<  sysPath << "\n";
+    std::cout.flush();
+
     std::ifstream ref(sysPath);
     if (!ref.good())
     {

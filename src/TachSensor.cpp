@@ -65,6 +65,9 @@ TachSensor::TachSensor(const std::string& path, const std::string& objectType,
         "/xyz/openbmc_project/sensors/fan_tach/" + name,
         "xyz.openbmc_project.Sensor.Value");
 
+    std::cout << " tach sensor interface : " << sensorInterface << " \n";
+    std::cout.flush();
+
     if (thresholds::hasWarningInterface(thresholds))
     {
         thresholdInterfaceWarning = objectServer.add_interface(
@@ -118,6 +121,9 @@ TachSensor::~TachSensor()
 
 void TachSensor::setupRead(void)
 {
+    std::cout << " In tach setup read \n";
+    std::cout.flush();
+
     boost::asio::async_read_until(
         inputDev, readBuf, '\n',
         [&](const boost::system::error_code& ec,
@@ -126,6 +132,9 @@ void TachSensor::setupRead(void)
 
 void TachSensor::handleResponse(const boost::system::error_code& err)
 {
+    std::cout << " In tach handle response \n";
+    std::cout.flush();
+
     if (err == boost::system::errc::bad_file_descriptor)
     {
         return; // we're being destroyed
@@ -187,6 +196,9 @@ void TachSensor::handleResponse(const boost::system::error_code& err)
 
 void TachSensor::checkThresholds(void)
 {
+    std::cout << " In tach check thresholds \n";
+    std::cout.flush();
+
     bool status = thresholds::checkThresholds(this);
 
     if (redundancy && *redundancy)

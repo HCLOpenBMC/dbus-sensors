@@ -203,7 +203,7 @@ void createSensors(
                 }
 
                 // Handles the falut-handle in sensors .
-                auto findNicFault = baseConfigMap->find("Nicfault");
+                auto findNicFault = baseConfigMap->find("FaultType");
                 if (findNicFault == baseConfigMap->end())
                 {
                     std::cerr << "could not find NIC Fault-Handle flag \n";

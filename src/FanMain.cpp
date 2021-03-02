@@ -261,7 +261,6 @@ void createSensors(
                         std::cout << "inside if loop\n";
                         std::cout.flush();
 
-                        sleep(5);
                         continue;
                     }
                     if (fanType == FanTypes::aspeed ||
@@ -271,8 +270,6 @@ void createSensors(
                         // in sysfs, we found the fan
                         std::cout << "fan type aspeed\n";
                         std::cout.flush();
-
-                        sleep(5);
 
                         sensorData = &(sensor.second);
 
