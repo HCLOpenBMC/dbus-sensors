@@ -74,6 +74,11 @@ FanTypes getFanType(const fs::path& parentPath)
 {
     fs::path linkPath = parentPath / "device";
     std::string canonical = fs::read_symlink(linkPath);
+
+    std::cout << "Link path : " << linkPath << "\n";
+    std::cout << "Canonical : " << canonical << "\n";
+    std::cout.flush();
+
     if (boost::ends_with(canonical, "1e786000.pwm-tacho-controller") ||
         boost::ends_with(canonical, "1e610000.pwm-tacho-controller"))
     {
@@ -167,6 +172,9 @@ void createSensors(
             // configuration
             for (const auto& path : paths)
             {
+                std::cout << "PATH : " << path <<"\n";
+                std::cout.flush();
+
                 std::smatch match;
                 std::string pathStr = path.string();
 
@@ -176,6 +184,11 @@ void createSensors(
                 fs::path directory = path.parent_path();
                 fs::path pwmPath = directory / ("pwm" + indexStr);
                 FanTypes fanType = getFanType(directory);
+
+                std::cout << "Directory : " << directory <<"\n";
+                std::cout << "PWM Path : " << pwmPath <<"\n";
+                std::cout << "FanType : " << fanType <<"\n";
+                std::cout.flush();
 
                 size_t bus = 0;
                 size_t address = 0;
@@ -195,7 +208,8 @@ void createSensors(
                 }
                 // convert to 0 based
                 size_t index = std::stoul(indexStr) - 1;
-
+                std::cout << " INDEX : " << index  << "\n";
+                std::cout.flush();
                 const char* baseType;
                 const SensorData* sensorData = nullptr;
                 const std::string* interfacePath = nullptr;
@@ -205,6 +219,8 @@ void createSensors(
                 {
                     // find the base of the configuration to see if indexes
                     // match
+                    std::cout << " inside for loop "<< "\n";
+                   std::cout.flush();
                     auto sensorBaseFind =
                         sensor.second.find(sensorTypes[fanType]);
                     if (sensorBaseFind == sensor.second.end())
@@ -216,6 +232,15 @@ void createSensors(
                     interfacePath = &(sensor.first.str);
                     baseType = sensorTypes[fanType];
 
+//                    std::cout << "sensor base findX : " << sensor.second.find(sensorTypes[fanType]  << "\n";
+//                    std::cout.flush();
+//                    std::cerr << "sensor base conf : " << sensorBaseFind  << "\n";
+//                    std::cout.flush();
+                    std::cout << "sensor interface path : " << *interfacePath  << "\n";
+                    std::cout.flush();
+                    std::cout << "sensor base type: " << baseType  << "\n";
+                    std::cout.flush();
+
                     auto findIndex = baseConfiguration->second.find("Index");
                     if (findIndex == baseConfiguration->second.end())
                     {
@@ -225,8 +250,18 @@ void createSensors(
                     }
                     unsigned int configIndex = std::visit(
                         VariantToUnsignedIntVisitor(), findIndex->second);
+
+//                    std::cout << "find index : " << findIndex  << "\n";
+//                    std::cout.flush();
+                    std::cout << " config index : " << configIndex  << "\n";
+                    std::cout.flush();
+
                     if (configIndex != index)
                     {
+                        std::cout << "inside if loop\n";
+                        std::cout.flush();
+
+                        sleep(5);
                         continue;
                     }
                     if (fanType == FanTypes::aspeed ||
@@ -234,7 +269,16 @@ void createSensors(
                     {
                         // there will be only 1 aspeed or nuvoton sensor object
                         // in sysfs, we found the fan
+                        std::cout << "fan type aspeed\n";
+                        std::cout.flush();
+
+                        sleep(5);
+
                         sensorData = &(sensor.second);
+
+                        std::cout << "sensor data : " << &(sensor.second) << "\n";
+                        std::cout.flush();
+
                         break;
                     }
                     else if (fanType == FanTypes::i2c)
