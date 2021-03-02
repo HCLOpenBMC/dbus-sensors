@@ -518,7 +518,7 @@ void createSensors(
                     }
 
                     sensor->pollTimeValue = pollTimeDefault;
-                    auto findPollTime = entry.second.find("PollTime");
+                    auto findPollTime = entry.second.find("PollRate");
                     if (findPollTime != entry.second.end())
                     {
                         sensor->pollTimeValue = std::visit(
