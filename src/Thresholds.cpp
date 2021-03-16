@@ -20,7 +20,7 @@
 #include <vector>
 
 std::string nicFaultHandle;
-bool slotThermalDown = false;
+bool slotThermalDown;
 
 using sdbusplus::exception::SdBusError;
 std::string fanFaultHandle;
@@ -296,13 +296,18 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
 
     for (auto& threshold : sensor->thresholds)
     {
-        if ((nicFaultHandle == "Yes") && (slotThermalDown))
+        if ((sensor->name == "MEZZ_SENSOR_REMOTE_TEMP") && (nicFaultHandle == "Yes") && (value > 105.0))
         {
-            if (value <= threshold.value)
-            {
-                powerOffOn("powerOnSlot.service");
-                slotThermalDown = false;
-            }
+           powerOffOn("powerOffSlot.service");
+	   slotThermalDown = true;
+           std::cerr << "NIC high threshold. So power off the slots \n";
+        }
+
+        if ((sensor->name == "MEZZ_SENSOR_REMOTE_TEMP") && (nicFaultHandle == "Yes") && (value < 95.0) && slotThermalDown)
+        {
+           powerOffOn("powerOnSlot.service");
+	   slotThermalDown = false;
+           std::cerr << "NIC Low threshold. So power on the slots \n";
         }
 
         // Use "Schmitt trigger" logic to avoid threshold trigger spam,
@@ -321,11 +326,6 @@ static std::vector<ChangeParam> checkThresholds(Sensor* sensor, double value)
                               << threshold.value << " assert: value " << value
                               << " raw data " << sensor->rawValue << "\n";
 
-                    if (nicFaultHandle == "Yes")
-                    {
-                        powerOffOn("powerOffSlot.service");
-                        slotThermalDown = true;
-                    }
                 }
             }
             else if (value < (threshold.value - sensor->hysteresisTrigger))
